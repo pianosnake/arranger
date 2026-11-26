@@ -1,5 +1,5 @@
 # Publishes the site to GitHub Pages on every push to main, except pushes that only change Markdown, the
-# README's screenshots or tests. defaults/ is part of the site (the page fetches it), so it publishes.
+# README's screenshots (images/ipad.jpeg, images/phone.png) or tests. The logo in images/ is part of the site. defaults/ is part of the site (the page fetches it), so it publishes.
 name: Pages
 
 on:
@@ -7,7 +7,8 @@ on:
     branches: [main]
     paths-ignore:
       - '**.md'
-      - 'screenshots/**'
+      - 'images/ipad.jpeg'
+      - 'images/phone.png'
       - 'tests/**'           # not part of the site (and kept out of git for now)
   workflow_dispatch:        # "Run workflow" in the Actions tab publishes by hand
 

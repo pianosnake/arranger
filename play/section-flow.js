@@ -20,18 +20,29 @@
 //   - INTRO plays that intro, then the main.
 //   - During an intro, fill or break, MAIN only changes where it goes next.
 //   The last press before a bar line wins. A section the style doesn't have falls back to the nearest one it has.
+// Newer four-main Yamaha styles name their fills AA, BB, CC, DD (the fill into that main) and their break "Fill In
+// BA". So a style with Fill In BA, no Fill In AB and no break section plays Fill In BA as its BREAK, not as a fill
+// (breakAlias). The reader keeps the section as fillBA, so the style's music hash and saved settings stay the same.
 // Loaded as a classic script (window.Arranger.SectionFlow) or with require() in Node (tests).
 (function () {
   'use strict';
   const LETTERS = ['A', 'B', 'C', 'D'];
   const kindOf = (id) => (id ? /^[a-z]+/.exec(id)[0] : null);
   const letterOf = (id) => (id ? id.replace(/^[a-z]+/, '').charAt(0) : null);
+  // The section a style's BREAK plays when it has no break section: Fill In BA in a style without Fill In AB.
+  function breakAlias(ids) {
+    const has = (id) => ids.indexOf(id) >= 0;
+    if (ids.some((id) => kindOf(id) === 'break') || !has('fillBA') || has('fillAB')) return null;
+    return 'fillBA';
+  }
 
   class SectionFlow {
     constructor(ids) {
       this.ids = ids.slice();
       this.has = {};
       ids.forEach((id) => { this.has[id] = true; });
+      this.breakId = breakAlias(ids);
+      if (this.breakId) delete this.has[this.breakId];    // not a fill in this style
       this.playing = false;
       this.current = null; this.pending = null; this.after = null;
       this.main = this.mains()[0] || 'A';
@@ -67,9 +78,11 @@
       return tries.find((id) => this.has[id]) || null;
     }
     breakFor(letter) {
-      return ['break' + letter + letter, 'break' + letter].find((id) => this.has[id]) || this.ids.find((id) => kindOf(id) === 'break') || null;
+      return ['break' + letter + letter, 'break' + letter].find((id) => this.has[id]) || this.ids.find((id) => kindOf(id) === 'break') || this.breakId;
     }
-    get currentKind() { return kindOf(this.current); }
+    // What a section is in this style: its kind, except the break alias, which is a 'break'.
+    roleOf(id) { return id && id === this.breakId ? 'break' : kindOf(id); }
+    get currentKind() { return this.roleOf(this.current); }
 
     press(kind, letter) {
       if (!this.playing) {
@@ -85,7 +98,7 @@
         const to = letterOf(id);
         this.main = to;
         if (cur === 'intro' || cur === 'fill' || cur === 'break') {      // finish it, then go to the new main
-          if (this.pending && kindOf(this.pending) !== 'main') this.after = id;
+          if (this.pending && this.roleOf(this.pending) !== 'main') this.after = id;
           else { this.pending = null; this.after = id; }
           return;
         }
@@ -119,7 +132,7 @@
     // selected ending is queued and the style stops after it.
     requestStop() {
       if (!this.playing) return true;
-      if (!this.ending || kindOf(this.current) === 'ending' || kindOf(this.pending) === 'ending') return true;
+      if (!this.ending || this.roleOf(this.current) === 'ending' || this.roleOf(this.pending) === 'ending') return true;
       this.pending = this.ending; this.after = 'stop';
       return false;
     }
@@ -146,6 +159,7 @@
   }
   SectionFlow.kindOf = kindOf;
   SectionFlow.letterOf = letterOf;
+  SectionFlow.breakAlias = breakAlias;
 
   if (typeof module !== 'undefined' && module.exports) module.exports = SectionFlow;
   else (window.Arranger = window.Arranger || {}).SectionFlow = SectionFlow;

@@ -38,7 +38,9 @@ body {
   background: var(--side); padding: 10px 8px 6px; border-right: 4px solid var(--side-dark);
 }
 .brand { display: flex; align-items: flex-start; gap: 12px; }
-.logo .model { font: 900 24px/1 var(--title-font); letter-spacing: -.5px; color: var(--accent); }
+.logo { display: flex; align-items: center; min-width: 0; }
+.logo img { display: block; height: 44px; width: auto; max-width: 100%; object-fit: contain; object-position: left center;
+  transform: translateY(-8%); }   /* images/logo-small.png: the logo trimmed, 600 x 157. Raised a little: the snake head on top made the words sit low of the gear's center */
 .brand .side-gear { margin-left: auto; padding: 5px 7px; }   /* top right (.brand: beats the .btn margin below) */
 
 .status-line { font-size: 11px; color: var(--text-dim); min-height: 14px; }
@@ -250,7 +252,7 @@ body {
    above: touch targets 44 px and up, bigger type, the bar counter under the keyboard in the CHORD box.
    ========================================================================================================== */
 .side { width: 280px; gap: 10px; padding: 14px 12px 10px; }
-.logo .model { font-size: 28px; }
+.logo img { height: 48px; }
 .brand { align-items: center; }
 .brand .side-gear { width: 48px; height: 48px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
 .brand .side-gear svg { width: 22px; height: 22px; }
@@ -412,14 +414,14 @@ label.btn.icon { cursor: pointer; }
 
 /* Very narrow, one screen (iPad Split View beside a chord chart, about 507 x 744): the header and the style list back
    on top, made short (the list scrolls inside a few rows), and every control compact enough that the whole arranger
-   fits without scrolling the page. The header is one line: ARRANGER, the connection status, the gear. */
+   fits without scrolling the page. The header is one line: the logo, the connection status, the gear. */
 @media (max-width: 640px) {
   .side { order: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 10px; row-gap: 6px;
     padding: 6px 10px 8px; border-top: 0; border-bottom: 4px solid var(--side-dark); }
   .main { order: 1; padding: 8px 10px 10px; gap: 8px; }
   .brand { display: contents; }
   .logo { grid-column: 1; grid-row: 1; }
-  .logo .model { font-size: 20px; }
+  .logo img { height: 32px; }
   .status-line { grid-column: 2; grid-row: 1; font-size: 12px; min-height: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .brand .side-gear { grid-column: 3; grid-row: 1; width: 36px; height: 36px; }
   .brand .side-gear svg { width: 18px; height: 18px; }

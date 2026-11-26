@@ -542,7 +542,8 @@
           return `<button class="btn sec" type="button" data-kind="${g.kind}" data-letter="${l}" data-id="${id}"${sec ? '' : ' disabled'} title="${sec ? sec.bars + ' bar' + (sec.bars === 1 ? '' : 's') : 'not in this style'}">${l}</button>`;
         }).join('');
       }
-      const ids = s.order.filter((id) => s.sections[id].kind === g.kind);
+      const alias = A.SectionFlow.breakAlias(s.order);   // Fill In BA as the BREAK of newer Yamaha styles
+      const ids = s.order.filter((id) => (id === alias ? 'break' : s.sections[id].kind) === g.kind);
       return `<button class="btn sec wide" type="button" data-kind="${g.kind}"${ids.length ? '' : ' disabled'} title="${ids.length ? esc(ids.map((id) => s.sections[id].name).join(', ')) : 'not in this style'}">${g.title}</button>`;
     };
     const group = (kind) => SECTION_GROUPS.find((g) => g.kind === kind);
@@ -605,7 +606,7 @@
     const playingId = pos ? pos.section : null;
     Array.from($('style-sections').querySelectorAll('.sec')).forEach((b) => {
       const kind = b.getAttribute('data-kind'), id = b.getAttribute('data-id');
-      const match = (x) => x && (id ? x === id : A.SectionFlow.kindOf(x) === kind);
+      const match = (x) => x && (id ? x === id : f.roleOf(x) === kind);
       b.classList.toggle('on', !!match(playingId));
       b.classList.toggle('pending', player.playing && !!match(f.pending));
       b.classList.toggle('next', player.playing && !!match(f.after) && !match(f.pending));
