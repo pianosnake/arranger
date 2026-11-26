@@ -5,7 +5,7 @@
   <title>Arranger</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=109">
+  <link rel="stylesheet" href="ui/style.css?v=115">
 </head>
 <body>
   <aside class="side">
@@ -97,7 +97,7 @@
     </section>
     <section class="parts">
       <button id="parts-toggle" class="parts-bar" type="button" aria-expanded="false" aria-controls="style-parts">
-        <span class="parts-bar-title" id="parts-arrow">PARTS ▸</span><span class="parts-bar-sum" id="parts-sum"></span>
+        <span class="parts-bar-title"><svg class="tri" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.2 8.4 5 3 8.8z"/></svg>PARTS</span><span class="parts-bar-sum" id="parts-sum"></span>
       </button>
       <div id="style-parts" hidden></div>
     </section>
@@ -111,7 +111,7 @@
     <div class="modal-panel" id="pane-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <div class="settings-head"><span id="settings-title">SETTINGS</span>
         <span class="settings-head-btns">
-          <button id="settings-close" class="btn ed-nav" type="button" aria-label="Close the settings">✕</button>
+          <button id="settings-close" class="btn ed-nav" type="button" aria-label="Close the settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button>
         </span>
       </div>
       <div class="settings-grid">
@@ -194,26 +194,26 @@
     </div>
   </div>
 
-  <script src="chord-names.js?v=3"></script>
-  <script src="chord-detector.js?v=48"></script>
-  <script src="keyboard-input.js?v=3"></script>
-  <script src="midi-ports.js?v=75"></script>
-  <script src="smf.js?v=3"></script>
-  <script src="style.js?v=46"></script>
-  <script src="sty-reader.js?v=24"></script>
-  <script src="stl-reader.js?v=62"></script>
-  <script src="style-files.js?v=21"></script>
-  <script src="style-library.js?v=46"></script>
-  <script src="zip.js?v=9"></script>
-  <script src="library-backup.js?v=47"></script>
-  <script src="meter.js?v=3"></script>
-  <script src="transposer.js?v=3"></script>
-  <script src="section-flow.js?v=100"></script>
-  <script src="gm-names.js?v=57"></script>
-  <script src="channel-map.js?v=66"></script>
-  <script src="player.js?v=102"></script>
-  <script src="sf-synth.js?v=18"></script>
-  <script src="controls.js?v=76"></script>
-  <script src="app.js?v=130"></script>
+  <script src="play/chord-names.js?v=3"></script>
+  <script src="play/chord-detector.js?v=48"></script>
+  <script src="play/keyboard-input.js?v=3"></script>
+  <script src="play/midi-ports.js?v=75"></script>
+  <script src="library/smf.js?v=3"></script>
+  <script src="library/style.js?v=46"></script>
+  <script src="library/sty-reader.js?v=24"></script>
+  <script src="library/stl-reader.js?v=62"></script>
+  <script src="library/style-files.js?v=21"></script>
+  <script src="library/style-library.js?v=46"></script>
+  <script src="library/zip.js?v=9"></script>
+  <script src="library/library-backup.js?v=48"></script>
+  <script src="play/meter.js?v=3"></script>
+  <script src="play/transposer.js?v=3"></script>
+  <script src="play/section-flow.js?v=100"></script>
+  <script src="play/gm-names.js?v=57"></script>
+  <script src="play/channel-map.js?v=66"></script>
+  <script src="play/player.js?v=102"></script>
+  <script src="synth/sf-synth.js?v=18"></script>
+  <script src="play/controls.js?v=76"></script>
+  <script src="ui/app.js?v=135"></script>
 </body>
 </html>

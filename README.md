@@ -53,17 +53,17 @@ collection read).
 - Which Roland slot is which (intro, fills, ending) is worked out from their lengths: still to be confirmed by ear.
 - Roland `.sth` styles too (13 Romanian styles checked): the same data as `.stl`, laid out a little differently.
 
-**Built-in synth:** in the settings, OUTPUT › SOUND: SOUNDFONT plays the style on this device instead of sending
+**Built-in synth:** in the settings, OUTPUT › SOUND: SOUNDFONT (the default) plays the style on this device instead of sending
 it to a MIDI port. BANK › CHOOSE… picks a General MIDI bank: `.sf2` only. `.sf3` isn't supported, so the page can use the SF2-only
 FluidSynth build, which is about 4× smaller; FluidSynth's WebAssembly builds don't read `.dls`. Convert either to `.sf2`
 with Polyphone (free).
 - The bank is kept in IndexedDB and loads again with the page. The synth plays at a fixed level (50% gain);
   the style's VOL and the iPad's volume set the loudness.
-- The synth is FluidSynth compiled to WebAssembly (js-synthesizer, in `lib/`). It renders on the page's own thread
+- The synth is FluidSynth compiled to WebAssembly (js-synthesizer, in `synth/lib/`). It renders on the page's own thread
   through a ScriptProcessor with a 2048-frame buffer, on every device: that's what sounded smooth on the iPad.
   Notes are timed by FluidSynth's sequencer on the samples rendered. The libraries load only when SOUNDFONT is
   chosen.
-- FluidSynth lives in a hidden frame (`sf-frame.html`). Choosing another bank throws the frame away and makes a new
+- FluidSynth lives in a hidden frame (`synth/sf-frame.html`). Choosing another bank throws the frame away and makes a new
   one, so the old bank's memory really goes back (WebAssembly memory never shrinks otherwise).
 - Browsers start audio only after a tap or a key press on the page: notes from the MIDI keyboard don't count. The
   settings say so when the sound hasn't started yet.
@@ -84,13 +84,34 @@ when it's imported. Copies with different bytes (another name, folder, editor, o
 
 ## Running it
 
-Plain HTML and JS, no network. The only libraries are the built-in synth's, in `lib/` (js-synthesizer 1.13.0,
+Plain HTML and JS, no network. The only libraries are the built-in synth's, in `synth/lib/` (js-synthesizer 1.13.0,
 BSD-3, its main-thread build only, and its FluidSynth 2.4.6 WebAssembly build `externals/libfluidsynth-2.4.6.js`, LGPL-2.1), copied from npm. Start a web server in this folder and open http://localhost:8000 in
 Chrome:
 
 ```
 python3 -m http.server 8000
 ```
+
+## Files
+
+| Folder | What's in it |
+|---|---|
+| `index.html` | the page |
+| `ui/` | `app.js` (the DOM and the wiring) and `style.css` |
+| `play/` | chords and playing: chord names and detection, the keyboard split, MIDI ports, controls, the player, sections, transposing, meter, channels, GM names |
+| `library/` | style files and the library: the `.sty` / `.stl` / `.sth` readers, SMF, the style model, the library (IndexedDB), backup zips |
+| `synth/` | the built-in SoundFont synth, its frame and FluidSynth (`lib/`) |
+| `defaults/` | what comes with the app: `FreeFont.sf2` and 11 styles, laid out like an unzipped backup (`library.json`, `styles/WORLD/`) |
+| `tests/` | unit tests and the command-line tools (see `tests/README.md`) |
+| `dev/` | local-only: the https certificate (`key.pem` isn't in git) and `filepick-test.html` |
+
+**Defaults:** on the first start (an empty library) the styles in `defaults/` are added, starred, in one folder,
+WORLD: 70's Disco, Polca 1 (at 127 bpm), Tarantella, That's Mambo, UK Rock'N, Wien Waltz (Roland E-80),
+Fallahi2, RHUMBA1, SAMBA5, LAMBADA (EXR-46) and RUMELI 1 (roland-em-styles). This happens once: deleting them later doesn't bring them
+back, and a library that already has styles is left alone. Until a bank is chosen, SOUNDFONT uses
+`defaults/FreeFont.sf2` (Free Font GM 3.2, 3.2 MB), fetched with the page and not stored. To change the defaults,
+edit `defaults/library.json` and the files in `defaults/styles/WORLD/`, or replace them with an unzipped BACKUP ›
+FAVORITES zip.
 
 On the iPad, import the folder into MIDI Charmer and route the keyboard into the plugin in AUM.
 

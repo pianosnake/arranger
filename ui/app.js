@@ -1,6 +1,6 @@
 // Arranger page: the DOM and Web MIDI wiring. The logic lives in the classes it loads (chord-detector.js,
 // keyboard-input.js, midi-ports.js, ...), which have no DOM and are tested in Node.
-// Plain JS, no libraries or network: it must run unmodified in desktop Chrome and inside the MIDI Charmer AUv3
+// Plain JS, no libraries or network (only the page's own files, e.g. defaults/): it must run unmodified in desktop Chrome and inside the MIDI Charmer AUv3
 // (iPad, iOS 15 WebKit: no class fields, no .at(), no container queries).
 (function () {
   'use strict';
@@ -20,7 +20,7 @@
     memory: saved.memory == null ? true : !!saved.memory,
     styleId: saved.styleId || null,              // the style last loaded from the library
     outPort: saved.outPort || {},                // { id, name } of the output, or { none: true }
-    outMode: saved.outMode === 'synth' ? 'synth' : 'midi', // OUTPUT › SOUND: a MIDI port, or the built-in SoundFont synth
+    outMode: saved.outMode === 'midi' ? 'midi' : 'synth', // OUTPUT › SOUND: the built-in SoundFont synth (default: it has a bank, FreeFont) or a MIDI port
     clockPort: saved.clockPort || { none: true }, // where MIDI clock goes; none by default
     rhChannel: saved.rhChannel || 0,             // right hand (keys from the split up) to this channel; 0 = off
     // The default PARTS setup is the built-in one (ChannelMap defaults). Older versions saved PARTS changes here for
@@ -33,6 +33,7 @@
     collapsed: saved.collapsed || {},            // style list: folder name -> collapsed
     partsOpen: !!saved.partsOpen,                // the PARTS table shown (the bar opens / closes it)
     showFolders: saved.showFolders == null ? true : !!saved.showFolders,   // LAYOUT › SHOW FOLDERS: the list grouped by folder
+    defaultsAdded: !!saved.defaultsAdded,        // the built-in styles (defaults/) were offered once; never again
   };
   function save() {
     try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* private mode, full storage */ }
@@ -242,13 +243,23 @@
     rebuilding = false;
   }
   let synthBooted = false;
+  // What comes with the app, in defaults/: a General MIDI bank and some styles (library.json and styles/, laid out
+  // like an unzipped backup). The styles are added once, on the first start; the bank is used until one is chosen.
+  const DEFAULT_BANK = 'FreeFont.sf2';
+  async function fetchDefault(path) {
+    const r = await fetch('defaults/' + path.split('/').map(encodeURIComponent).join('/'));
+    if (!r.ok) throw new Error(`${path}: ${r.status}`);
+    return new Uint8Array(await r.arrayBuffer());
+  }
   async function bootSynth() {
     if (synthBooted) return;
     synthBooted = true;
     try { await synth.start(); } catch (e) { synthBooted = false; return; }
     if (synth.bankName) return;
     const rec = await bankStore.get();
-    if (rec && rec.file && !synth.bankName) await loadBank(rec.file, false);
+    if (rec && rec.file) { if (!synth.bankName) await loadBank(rec.file, false); return; }
+    // No bank chosen yet: the one that comes with the app (defaults/, fetched each time, not kept in IndexedDB).
+    if (!synth.bankName) await loadBank({ name: DEFAULT_BANK, arrayBuffer: () => fetchDefault(DEFAULT_BANK).then((b) => b.buffer) }, false);
   }
   // Browsers start audio only from a tap or a key press.
   // wake() also replaces audio that iOS interrupted (the app was in the background, another audio app played).
@@ -410,6 +421,10 @@
     localStorage: 'IndexedDB isn\'t available here: styles are kept in localStorage, which holds about 50-100.',
     memory: 'No storage here: imported styles are lost when the page reloads.',
   };
+  // A favourite's row: a tiny yellow star before the name (before, so a long name's ellipsis never cuts it off).
+  // The open / closed triangle of a folder header and the PARTS bar: points right, turned down (CSS) when open.
+  const TRI_SVG = '<svg class="tri" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.2 8.4 5 3 8.8z"/></svg>';
+  const ROW_STAR = '<svg class="row-star" viewBox="0 0 24 24" width="11" height="11" aria-label="favorite"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.3L12 17.1l-5.7 3.1 1.2-6.3-4.7-4.4 6.4-.8z"/></svg>';
   const view = { search: '', favorites: false, meter: '', confirmDelete: null, importing: false };
   let library = null;
   let current = null;                 // { entry, style } of the loaded style
@@ -428,7 +443,7 @@
       const on = current && current.entry.id === e.id ? ' on' : '';
       const sub = [e.meter, e.tempo + ' bpm', e.source === 'sty' ? 'Yamaha' : 'Roland'].join(' · ');
       return `<div class="row${on}" data-id="${esc(e.id)}">` +
-        `<div class="row-main"><div class="row-name">${esc(e.name)}</div><div class="row-sub">${esc(sub)}</div></div></div>`;
+        `<div class="row-main"><div class="row-name">${e.favorite ? ROW_STAR : ''}${esc(e.name)}</div><div class="row-sub">${esc(sub)}</div></div></div>`;
     };
     const empty = `<div class="empty">${library.size ? 'No styles match.' : 'No styles yet. + adds style files; the folder button adds every style in a folder.'}</div>`;
     $('lib-count').textContent = library.size ? `${rows.length} of ${library.size} styles` : '';
@@ -447,7 +462,7 @@
     $('lib-list').innerHTML = folders.map((folder) => {
       const closed = !searching && !!state.collapsed[folder] && folder !== view.openFolder;
       const head = `<div class="folder${closed ? ' closed' : ''}" data-folder="${esc(folder)}" role="button" aria-expanded="${!closed}">` +
-        `<span class="folder-arrow">${closed ? '▸' : '▾'}</span><span class="folder-name">${esc(folder || 'Other')}</span>` +
+        `${TRI_SVG}<span class="folder-name">${esc(folder || 'Other')}</span>` +
         `<span class="folder-count">${groups[folder].length}</span></div>`;
       if (closed) return head;
       return head + groups[folder].map(rowHtml).join('');
@@ -562,7 +577,6 @@
     const open = !!state.partsOpen && !!current;
     $('style-parts').hidden = !open;
     $('parts-toggle').setAttribute('aria-expanded', String(open));
-    $('parts-arrow').textContent = open ? 'PARTS ▾' : 'PARTS ▸';
     if (!current) { $('parts-sum').textContent = 'Load a style to see its parts'; return; }
     const parts = current.style.parts;
     const chans = parts.map((p) => channelMap.channel(p.id)).filter(Boolean);
@@ -602,20 +616,33 @@
   }
 
   // The bar / beat counter, while playing: bar number, then the pulses in their groups.
-  let lastCounter = '';
+  let lastCounter = '', counterFit = '';
+  // Many pulses (11/16, 15/8) made the counter wider than the CHORD box: its type (and the dots, sized in em) shrinks
+  // until it fits, on one line. Measured only when the meter or the bar number's digits change, or the window resizes.
+  function fitCounter() {
+    const el = $('counter');
+    el.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    for (let k = 0; k < 15 && el.scrollWidth > el.clientWidth + 1 && size > 7; k++) { size *= 0.9; el.style.fontSize = size.toFixed(1) + 'px'; }
+  }
+  window.addEventListener('resize', () => { counterFit = ''; lastCounter = ''; });
   function renderCounter() {
     const pos = player.playing && player.position(performance.now());
-    let html = '';
+    let html = '', fit = '';
     if (pos) {
       const m = player.meter, dots = [];
+      fit = m.starts.join('') + ':' + String(pos.bar + 1).length;
       for (let p = 0; p < m.num; p++) {
         if (p && m.starts[p]) dots.push('<span class="sep">|</span>');
-        dots.push(`<span class="p${m.starts[p] ? ' g' : ''}${p === pos.pulse ? ' on' : ''}">●</span>`);
+        dots.push(`<span class="p${m.starts[p] ? ' g' : ''}${p === pos.pulse ? ' on' : ''}"></span>`);
       }
       html = `<span class="bar">${pos.bar + 1}</span>${dots.join('')}`;
       if (pos.section !== lastSection) { lastSection = pos.section; renderTransport(); }
     } else if (lastSection) { lastSection = null; renderTransport(); }
-    if (html !== lastCounter) { $('counter').innerHTML = html; lastCounter = html; }
+    if (html !== lastCounter) {
+      $('counter').innerHTML = html; lastCounter = html;
+      if (fit !== counterFit) { counterFit = fit; if (fit) fitCounter(); }
+    }
     requestAnimationFrame(renderCounter);
   }
   let lastSection = null;
@@ -1049,6 +1076,20 @@
     renderStorage();
   }
 
+  // The first start (an empty library): the built-in styles, starred. Only once: deleting them all later doesn't bring
+  // them back, and a library that already has styles is left as it is. If they can't be fetched, next start tries again.
+  async function addDefaults() {
+    if (state.defaultsAdded) return;
+    if (!library.size) {
+      try {
+        const manifest = JSON.parse(new TextDecoder().decode(await fetchDefault(A.LibraryBackup.MANIFEST)));
+        await A.LibraryBackup.restoreFolder(library, manifest, fetchDefault);
+      } catch (e) { return; }
+    }
+    state.defaultsAdded = true;
+    save();
+  }
+
   // STORAGE in the settings: where styles are kept, how many, and how much space their files take.
   function renderStorage() {
     const bytes = library.totalBytes();
@@ -1064,6 +1105,7 @@
 
   async function openLibrary() {
     library = await A.StyleLibrary.openBest(window);
+    await addDefaults();
     renderLibrary();
     if (state.styleId && library.entries[state.styleId]) {
       // The style from before the reload: loaded, its folder opened (just for now) and its row scrolled into view.

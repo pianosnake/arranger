@@ -1,0 +1,86 @@
+{
+ "app": "arranger",
+ "version": 1,
+ "exported": "2026-11-26T00:00:00.000Z",
+ "styles": [
+  {
+   "file": "styles/WORLD/70's Disco.STL",
+   "fileName": "70's Disco.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
+  },
+  {
+   "file": "styles/WORLD/Polca 1.STL",
+   "fileName": "Polca 1.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {
+    "tempo": 127
+   }
+  },
+  {
+   "file": "styles/WORLD/Tarantella.STL",
+   "fileName": "Tarantella.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
+  },
+  {
+   "file": "styles/WORLD/That's Mambo.STL",
+   "fileName": "That's Mambo.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
+  },
+  {
+   "file": "styles/WORLD/FALLAHI2.STL",
+   "fileName": "FALLAHI2.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
+  },
+  {
+   "file": "styles/WORLD/RHUMBA1.STL",
+   "fileName": "RHUMBA1.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
+  },
+  {
+   "file": "styles/WORLD/SAMBA5.STL",
+   "fileName": "SAMBA5.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
+  },
+  {
+   "file": "styles/WORLD/RUMELI_1.STL",
+   "fileName": "RUMELI_1.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
+  },
+  {
+   "file": "styles/WORLD/UK Rock'N.STL",
+   "fileName": "UK Rock'N.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
+  },
+  {
+   "file": "styles/WORLD/Wien Waltz.STL",
+   "fileName": "Wien Waltz.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
+  },
+  {
+   "file": "styles/WORLD/LAMBADA.STL",
+   "fileName": "LAMBADA.STL",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
+  }
+ ]
+}
