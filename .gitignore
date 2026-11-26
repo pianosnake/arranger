@@ -1,4 +1,6 @@
 .DS_Store
 node_modules/
+# Kept on this Mac only: the plan, the tests (with third-party style files) and the local https certificate.
 PLAN.md
-dev/key.pem
+tests/
+dev/

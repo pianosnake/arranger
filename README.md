@@ -1,8 +1,13 @@
 # Arranger
 
-A Web MIDI page that will play Yamaha `.sty` and Roland `.stl` accompaniment styles. You play chords with your left
-hand, the page finds the chord, and it plays the style's parts on separate MIDI channels, so the host can route them
-(for example everything to a GM SoundFont player, drums to a drum plugin). See `PLAN.md` for the whole plan.
+Live at https://pianosnake.github.io/arranger/
+
+A Web MIDI page that plays Yamaha `.sty` and Roland `.stl` / `.sth` accompaniment styles. You play chords with your
+left hand, the page finds the chord, and it plays the style through its built-in General MIDI synth (FreeFont), or
+sends the parts on separate MIDI channels, so a host can route them (for example everything to a GM SoundFont player,
+drums to a drum plugin). It comes with 11 styles to start with; add your own with +.
+
+It needs a browser with Web MIDI: desktop Chrome or Edge, or on the iPad / iPhone a Web MIDI browser app.
 
 ## Status
 
@@ -102,8 +107,6 @@ python3 -m http.server 8000
 | `library/` | style files and the library: the `.sty` / `.stl` / `.sth` readers, SMF, the style model, the library (IndexedDB), backup zips |
 | `synth/` | the built-in SoundFont synth, its frame and FluidSynth (`lib/`) |
 | `defaults/` | what comes with the app: `FreeFont.sf2` and 11 styles, laid out like an unzipped backup (`library.json`, `styles/WORLD/`) |
-| `tests/` | unit tests and the command-line tools (see `tests/README.md`) |
-| `dev/` | local-only: the https certificate (`key.pem` isn't in git) and `filepick-test.html` |
 
 **Defaults:** on the first start (an empty library) the styles in `defaults/` are added, starred, in one folder,
 WORLD: 70's Disco, Polca 1 (at 127 bpm), Tarantella, That's Mambo, UK Rock'N, Wien Waltz (Roland E-80),
@@ -115,4 +118,4 @@ FAVORITES zip.
 
 On the iPad, import the folder into MIDI Charmer and route the keyboard into the plugin in AUM.
 
-Tests: `node --test arranger/tests/unit/` from `charmer/` (see `tests/README.md`).
+The unit tests and their style files are kept out of this repository.

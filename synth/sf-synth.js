@@ -13,7 +13,7 @@
 // is what lets the audio start), and the processor calls the frame's synth to render.
 //
 //   new SoundFontSynth({ base, clock, onChange })
-//     base     where sf-frame.html is ('')
+//     base     put before the frame's address, synth/sf-frame.html ('': the page is index.html)
 //     clock()  ms, the same clock as the timestamps passed to send (performance.now in the page)
 //   send(bytes, time)       like MIDIOutput.send: channel messages, played at time (clock ms), or now without one.
 //                           Timed messages go through FluidSynth's own sequencer, which runs on the samples rendered;
@@ -80,7 +80,7 @@
     constructor(o) {
       const opt = o || {};
       this.base = opt.base || '';
-      this.frameUrl = opt.frame || 'sf-frame.html?v=1';
+      this.frameUrl = opt.frame || 'synth/sf-frame.html?v=2';
       this.clock = opt.clock || (() => performance.now());
       this.onChange = opt.onChange || (() => {});
       this.status = 'off'; this.error = ''; this.bankName = '';

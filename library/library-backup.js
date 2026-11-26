@@ -8,6 +8,8 @@
 //     date added come back too. A style that is already in the library keeps its own settings, but gets a
 //     favourite star the backup had. Without a library.json (any zip of .sty / .stl files, e.g. a style pack),
 //     its files are imported with their zip folder as the folder.
+//   restoreFolder(library, manifest, fetchFile, onProgress) -> the same   a backup laid out as plain files (the app's
+//     defaults/ folder): manifest is its library.json, fetchFile(path) -> Promise<Uint8Array> reads one of its files.
 // Loaded as a classic script (window.Arranger.LibraryBackup) or with require() in Node (tests).
 (function () {
   'use strict';
@@ -57,11 +59,26 @@
       });
     }
     if (!items.length) throw new Error('No styles in this zip.');
+    return addItems(library, items.map((x) => ({ name: x.entry.name, data: () => x.entry.data, meta: x.meta })), onProgress);
+  }
+
+  function checkManifest(manifest) {
+    if (!manifest || manifest.app !== 'arranger' || !Array.isArray(manifest.styles)) throw new Error('This library.json isn\'t an arranger backup.');
+  }
+
+  async function restoreFolder(library, manifest, fetchFile, onProgress) {
+    checkManifest(manifest);
+    if (!manifest.styles.length) throw new Error('No styles in this library.json.');
+    return addItems(library, manifest.styles.map((m) => ({ name: m.file, data: () => fetchFile(m.file), meta: m })), onProgress);
+  }
+
+  // items: [{ name (path in the backup), data() -> bytes or Promise of them, meta (a library.json style) }]
+  async function addItems(library, items, onProgress) {
     const out = { added: [], duplicates: [], failed: [], settings: 0 };
     for (let k = 0; k < items.length; k++) {
-      const { entry, meta } = items[k];
+      const entry = items[k], meta = entry.meta;
       try {
-        const r = await library.add(meta.fileName || entry.name.split('/').pop(), entry.data, meta.folder || '');
+        const r = await library.add(meta.fileName || entry.name.split('/').pop(), await entry.data(), meta.folder || '');
         if (r.duplicate) {
           out.duplicates.push(meta.fileName);
           if (meta.favorite && !r.entry.favorite) await library.setFavorite(r.entry.id, true);
@@ -83,7 +100,7 @@
     return out;
   }
 
-  const LibraryBackup = { backup, restore, MANIFEST };
+  const LibraryBackup = { backup, restore, restoreFolder, MANIFEST };
   if (isNode) module.exports = LibraryBackup;
   else (window.Arranger = window.Arranger || {}).LibraryBackup = LibraryBackup;
 }());

@@ -19,7 +19,7 @@
 (function () {
   'use strict';
   const isNode = typeof module !== 'undefined' && module.exports;
-  const N = isNode ? require('./chord-names.js') : window.Arranger.ChordNames;
+  const N = isNode ? require('../play/chord-names.js') : window.Arranger.ChordNames;
 
   const KINDS = ['intro', 'main', 'fill', 'break', 'ending'];
   const ROLES = ['drums', 'bass', 'chord', 'pad', 'phrase'];
