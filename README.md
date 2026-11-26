@@ -11,15 +11,15 @@ A Web MIDI page that plays Yamaha `.sty` and Roland `.stl` / `.sth` accompanimen
 
 ## Features
 
-* **Learn MIDI controls:** any button (start / stop, intros, mains, fills, endings, sync start, tap tempo, tempo up / down…) can be assigned to a CC, a note or a program change from any MIDI device, so foot switches, pads and knobs can run the arranger.
-* **Yamaha and Roland styles:** `.sty`, `.prs`, `.bcs`, `.sst` (SFF1 and SFF2) and Roland `.stl` / `.sth`, including odd meters like 7/8 and 9/8.
-* **Chord detection** below a split point you set (or learn from a key), with chord latch, inversions and slash chords.
-* **Arranger sections:** intros A–C, mains A–D, fills, break and endings A–C, changing on the next bar line, with auto fill, sync start and "chord starts style".
-* **Built-in synth** with a General MIDI SoundFont, or load your own `.sf2`.
-* **MIDI out:** each part on its own channel, with program changes, mute and velocity adjust per part, and the right hand sent to a channel of your choice.
-* **MIDI clock out** so a looper or DAW follows along.
-* **Tempo** with + / −, tap tempo, and volume, remembered for each style.
-* **Style library** kept on the device: folders, search, favorites, a time signature filter, and backup / restore as a zip. Comes with 11 styles to start with.
+1. **Learn MIDI controls:** any button can be assigned to a CC, a note or a program change from any MIDI device, so foot switches, pads and knobs can run the arranger.
+2. **Yamaha and Roland styles,** including odd meters.
+3. **Chord detection** below a split point, with chord latch, inversions and slash chords.
+4. **Arranger sections:** intros, mains, fills, break and endings, with auto fill, sync start and "chord starts style".
+5. **Built-in synth** with a General MIDI SoundFont, or your own `.sf2`.
+6. **MIDI out:** each part on its own channel, with program change, mute and velocity per part, plus the right hand.
+7. **MIDI clock out** so a looper or DAW follows along.
+8. **Tempo** with + / −, tap tempo, and volume, remembered for each style.
+9. **Style library:** folders, search, favorites, a time signature filter and zip backup, starting with 11 styles.
 
 You can download some free Yamaha styles from [here](https://www.jjazzlab.org/en/resources/).
 
