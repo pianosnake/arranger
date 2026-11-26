@@ -33,8 +33,9 @@ Styles are stored in IndexedDB, so they're still there after a reload.
   (the style files in their folders, plus `library.json` with favourites and tempos). LIBRARY › RESTORE adds the styles back
   from such a zip, or from any zip of `.sty` / `.stl` / `.sth` files. A zip picked with + is restored the same way. BACKUP › FAVORITES saves only the starred styles, in the
   same format.
-- Notes are sent about 100 ms ahead with timestamps. Keep the tab in front: browsers slow down timers in
-  background tabs.
+- Notes are sent about 100 ms ahead with timestamps. When the page goes to the background (another app or tab in
+  front, the home screen), the style stops and nothing is sent until it's back: browsers slow down or stop a
+  background page's timers, so the notes came slow and then all at once.
 
 **Phase 4:** controls from other devices.
 - In the settings, CONTROLS lists every button: Intro A-C, Main A-D, Fill, Break, Ending A-C, Start / Stop,
@@ -58,15 +59,17 @@ FluidSynth build, which is about 4× smaller; FluidSynth's WebAssembly builds do
 with Polyphone (free).
 - The bank is kept in IndexedDB and loads again with the page. The synth plays at a fixed level (50% gain);
   the style's VOL and the iPad's volume set the loudness.
-- The synth is FluidSynth compiled to WebAssembly (js-synthesizer, in `lib/`), running in an AudioWorklet. Notes are
-  timed by FluidSynth's sequencer on the audio clock. The libraries load only when SOUNDFONT is chosen.
+- The synth is FluidSynth compiled to WebAssembly (js-synthesizer, in `lib/`). It renders on the page's own thread
+  through a ScriptProcessor with a 2048-frame buffer, on every device: that's what sounded smooth on the iPad.
+  Notes are timed by FluidSynth's sequencer on the samples rendered. The libraries load only when SOUNDFONT is
+  chosen.
+- FluidSynth lives in a hidden frame (`sf-frame.html`). Choosing another bank throws the frame away and makes a new
+  one, so the old bank's memory really goes back (WebAssembly memory never shrinks otherwise).
 - Browsers start audio only after a tap or a key press on the page: notes from the MIDI keyboard don't count. The
   settings say so when the sound hasn't started yet.
 - RIGHT HAND and PANIC go to the synth as well. CLOCK PORT still sends MIDI clock to a port.
-- The synth picks its engine itself: on iPad / iPhone it runs on the page's own thread with a 2048-frame buffer
-  (the iPad's AudioWorklet sounded choppy); elsewhere in an AudioWorklet when the page has one (`https://` or
-  `localhost`). Style timing is the same either way (notes are scheduled ahead); the right hand through the synth
-  is a little late, so use MIDI PORT for live playing. On the iPad the ring / silent switch can mute web audio.
+- Style timing isn't hurt by the buffer (notes are scheduled ahead); the right hand through the synth is a little
+  late, so use MIDI PORT for live playing. On the iPad the ring / silent switch can mute web audio.
 
 **MIDI clock:** pick a CLOCK PORT in the settings (off by default; it can be the same port as the output). It
 sends Start on the first beat, 24 clocks a quarter note through every section, style and tempo change, and Stop when
@@ -82,7 +85,7 @@ when it's imported. Copies with different bytes (another name, folder, editor, o
 ## Running it
 
 Plain HTML and JS, no network. The only libraries are the built-in synth's, in `lib/` (js-synthesizer 1.13.0,
-BSD-3, and its FluidSynth 2.4.6 WebAssembly build `externals/libfluidsynth-2.4.6.js`, LGPL-2.1), copied from npm. Start a web server in this folder and open http://localhost:8000 in
+BSD-3, its main-thread build only, and its FluidSynth 2.4.6 WebAssembly build `externals/libfluidsynth-2.4.6.js`, LGPL-2.1), copied from npm. Start a web server in this folder and open http://localhost:8000 in
 Chrome:
 
 ```

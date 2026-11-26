@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- The built-in synth's FluidSynth lives in this hidden frame (SoundFontSynth, sf-synth.js), not in the page itself:
+     WebAssembly memory never shrinks, so the only way to give a bank's memory back is to throw away the whole
+     frame. A new bank gets a new frame. The frame is same-origin, so it runs on the page's own thread: the page's
+     ScriptProcessor calls the synth's render directly, exactly as when FluidSynth ran in the page. -->
+<meta charset="utf-8">
+<script src="lib/libfluidsynth-2.4.6.js"></script>
+<script src="lib/js-synthesizer.min.js"></script>
+<script src="sf-load.js?v=3"></script>
+<script>
+  'use strict';
+  // A synth and its sequencer at this sample rate. The sequencer runs on the samples rendered (not a timer).
+  window.arrangerBoot = async function (rate, settings) {
+    JSSynth.Synthesizer.initializeWithFluidSynthModule(window.Module);
+    await JSSynth.Synthesizer.waitForWasmInitialized();
+    const synth = new JSSynth.Synthesizer();
+    synth.init(rate, settings);
+    const seq = await JSSynth.Synthesizer.createSequencer();
+    await seq.registerSynthesizer(synth);
+    return { synth, seq };
+  };
+</script>

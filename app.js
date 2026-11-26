@@ -55,8 +55,9 @@
     lower: detector,
     upper: (d) => {
       const t = d[0] & 0xF0;
-      // The right hand plays through on its own channel, straight away: nothing is drawn for it.
-      if (state.rhChannel && midi.output) {
+      // The right hand plays through on its own channel, straight away: nothing is drawn for it. Not while the page is
+      // in the background (see 'background' below).
+      if (state.rhChannel && midi.output && !hidden()) {
         try { midi.output.send([t | (state.rhChannel - 1)].concat(Array.from(d).slice(1))); } catch (e) { /* port gone */ }
       }
     },
@@ -174,6 +175,7 @@
   // again with the page. The synth has send(data, time) like a MIDI output, so the player, the right hand and PANIC
   // use it as one.
   const synth = new A.SoundFontSynth({ clock: () => performance.now(), onChange: () => { renderSynth(); if (synth.status === 'stalled') rebuildSynth(); } });
+  window.arrangerSynth = synth;                  // for checking from the browser's console
   const bankStore = (() => {
     const open = () => new Promise((resolve, reject) => {
       if (!window.indexedDB) { reject(new Error('No IndexedDB')); return; }
@@ -228,7 +230,7 @@
       sfMsg(`Could not load ${file.name}${why && why !== 'Error' ? ` (${why})` : ''}. Use a .sf2 bank (convert .sf3 / .dls with Polyphone); very large banks may not fit in memory.`, true);
     }
   }
-  // The audio stopped rendering (the watchdog in SoundFontSynth): a new synth, and the saved bank again.
+  // The audio stopped rendering (the watchdog in SoundFontSynth): new audio. The synth keeps its bank (its frame stays).
   let rebuilding = false;
   async function rebuildSynth() {
     if (rebuilding) return;
@@ -251,7 +253,30 @@
   // Browsers start audio only from a tap or a key press.
   // wake() also replaces audio that iOS interrupted (the app was in the background, another audio app played).
   ['pointerdown', 'touchend', 'keydown', 'click'].forEach((t) => document.addEventListener(t, () => synth.wake(), true));
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') synth.visible(); });
+  // ---------- background ----------
+  // In the background the browser slows the page's timers down (iOS stops them), so the player fell behind, notes
+  // came late and slow, and on coming back everything it had missed went out at once. So the page stops sending:
+  // the style stops (with its note-offs and MIDI clock Stop), the right hand isn't passed on, and nothing starts
+  // until the page is back. "Background": the page is hidden (another app or tab in front, the iPad's home screen,
+  // the screen off). Not a mere loss of focus: clicking into another window on the Mac keeps it playing.
+  const hidden = () => document.visibilityState === 'hidden';
+  // The built-in synth also drops what it had queued: the style schedules ~100 ms ahead, and on the iPad iOS takes
+  // the audio away with those notes still waiting, so the next tap that started the audio again played a bit of
+  // rhythm (2026-11-25). Again on coming back, for anything that came in on the way out.
+  function toBackground() {
+    sync.armed = false;
+    const was = player.playing;
+    if (was) player.stop();
+    synth.quiet();
+    if (was) { panic(); setStatus('Stopped: the page went to the background.'); }
+    renderTransport();
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (hidden()) { toBackground(); return; }
+    if (!player.playing) synth.quiet();
+    synth.visible();
+  });
+  window.addEventListener('pagehide', toBackground);
   $('out-mode').addEventListener('change', (ev) => {
     state.outMode = ev.target.value === 'synth' ? 'synth' : 'midi';
     save();
@@ -304,6 +329,7 @@
   $('start').addEventListener('animationend', () => $('start').classList.remove('took'));
   function startStop() {
     if (!current) return;
+    if (!player.playing && hidden()) return;       // nothing starts in the background (a chord, a foot switch)
     flashStart();
     if (player.playing) player.stop(); else { player.setChord(detector.chord); player.start(); }
     renderTransport();
