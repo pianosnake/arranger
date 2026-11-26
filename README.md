@@ -12,7 +12,7 @@ after you let go, as on arranger keyboards.
 
 **Yamaha formats:** SFF1 and SFF2 (Tyros-era `.sty`, with `Ctb2` chord rules).
 
-**Phase 2:** the style list. + adds `.sty` / `.stl` / `.sth` files; the folder button (desktop Chrome) adds every style in a folder.
+**Phase 2:** the style list. + adds `.sty` / `.prs` / `.bcs` / `.sst` (Yamaha) and `.stl` / `.sth` (Roland) files; the folder button (desktop Chrome) adds every style in a folder.
 The list is searchable, filters by time signature and keeps favourites. Tap a style to see its sections and parts.
 Styles are stored in IndexedDB, so they're still there after a reload.
 
@@ -31,7 +31,7 @@ Styles are stored in IndexedDB, so they're still there after a reload.
 - CHORD STARTS STYLE (settings): a chord played while stopped starts the style.
 - STORAGE (settings): how many styles there are and their size. BACKUP › ALL downloads the whole library as one zip
   (the style files in their folders, plus `library.json` with favourites and tempos). LIBRARY › RESTORE adds the styles back
-  from such a zip, or from any zip of `.sty` / `.stl` / `.sth` files. BACKUP › FAVORITES saves only the starred styles, in the
+  from such a zip, or from any zip of `.sty` / `.stl` / `.sth` files. A zip picked with + is restored the same way. BACKUP › FAVORITES saves only the starred styles, in the
   same format.
 - Notes are sent about 100 ms ahead with timestamps. Keep the tab in front: browsers slow down timers in
   background tabs.
@@ -41,7 +41,6 @@ Styles are stored in IndexedDB, so they're still there after a reload.
   Start / Ending (what the space bar does), Sync Start, Auto Fill, Tap Tempo and Tempo − / +.
 - Tap LEARN next to one and press a switch: a CC, a note (pads) or a program change (pedal boards). The assignment
   keeps that switch's port and channel. Pick another port, or ANY PORT, from its menu.
-- LATCH is for pedals that send on and off on alternate presses.
 - Messages used by a control never reach the keyboard: a foot switch on the keyboard's channel adds no notes.
 - TAP (next to the tempo) sets the tempo from the last few taps, in quarter notes.
 
@@ -53,13 +52,37 @@ collection read).
 - Which Roland slot is which (intro, fills, ending) is worked out from their lengths: still to be confirmed by ear.
 - Roland `.sth` styles too (13 Romanian styles checked): the same data as `.stl`, laid out a little differently.
 
+**Built-in synth:** in the settings, OUTPUT › SOUND: SOUNDFONT plays the style on this device instead of sending
+it to a MIDI port. BANK › CHOOSE… picks a General MIDI bank: `.sf2` only. `.sf3` isn't supported, so the page can use the SF2-only
+FluidSynth build, which is about 4× smaller; FluidSynth's WebAssembly builds don't read `.dls`. Convert either to `.sf2`
+with Polyphone (free).
+- The bank is kept in IndexedDB and loads again with the page. The synth plays at a fixed level (50% gain);
+  the style's VOL and the iPad's volume set the loudness.
+- The synth is FluidSynth compiled to WebAssembly (js-synthesizer, in `lib/`), running in an AudioWorklet. Notes are
+  timed by FluidSynth's sequencer on the audio clock. The libraries load only when SOUNDFONT is chosen.
+- Browsers start audio only after a tap or a key press on the page: notes from the MIDI keyboard don't count. The
+  settings say so when the sound hasn't started yet.
+- RIGHT HAND and PANIC go to the synth as well. CLOCK PORT still sends MIDI clock to a port.
+- The synth picks its engine itself: on iPad / iPhone it runs on the page's own thread with a 2048-frame buffer
+  (the iPad's AudioWorklet sounded choppy); elsewhere in an AudioWorklet when the page has one (`https://` or
+  `localhost`). Style timing is the same either way (notes are scheduled ahead); the right hand through the synth
+  is a little late, so use MIDI PORT for live playing. On the iPad the ring / silent switch can mute web audio.
+
 **MIDI clock:** pick a CLOCK PORT in the settings (off by default; it can be the same port as the output). It
 sends Start on the first beat, 24 clocks a quarter note through every section, style and tempo change, and Stop when
 the style stops (also at the end of an ending), so a looper or DAW follows the arranger.
 
+**Music hash:** every style gets a hash of its music (everything the reader gets from the file, not its name), once,
+when it's imported. Copies with different bytes (another name, folder, editor, or STL vs STH) share it.
+- Tempo, VOL and the PARTS setup belong to the hash: copies share them, and they come back when a style is imported
+  again.
+- DEFAULTS, in the PARTS table's header, drops the loaded style's own PARTS setup; it's greyed out when there's none.
+- Imports say how many new styles have the same music as one already in the library.
+
 ## Running it
 
-Plain HTML and JS, no libraries, no network. Start a web server in this folder and open http://localhost:8000 in
+Plain HTML and JS, no network. The only libraries are the built-in synth's, in `lib/` (js-synthesizer 1.13.0,
+BSD-3, and its FluidSynth 2.4.6 WebAssembly build `externals/libfluidsynth-2.4.6.js`, LGPL-2.1), copied from npm. Start a web server in this folder and open http://localhost:8000 in
 Chrome:
 
 ```

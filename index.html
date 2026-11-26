@@ -5,7 +5,7 @@
   <title>Arranger</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=39">
+  <link rel="stylesheet" href="style.css?v=109">
 </head>
 <body>
   <aside class="side">
@@ -19,14 +19,20 @@
 
     <div class="side-pane" id="pane-styles">
       <div class="lib-tools">
-        <button id="lib-import" class="btn icon" type="button" title="Add style files (.sty / .stl / .sth)" aria-label="Add style files">
+        <!-- Labels for the file inputs, not buttons that click them from code: tapping the label opens the picker
+             natively, which iPad web views handle better than a script opening a display:none input. -->
+        <label id="lib-import" for="lib-files" class="btn icon" title="Add style files (.sty / .prs / .bcs / .sst / .stl / .sth)">
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M7 2h2v5h5v2H9v5H7V9H2V7h5z"/></svg>
-        </button>
-        <button id="lib-folder" class="btn icon" type="button" title="Add every style in a folder" aria-label="Add a folder of styles" hidden>
+          <span class="sr-only">Add style files</span>
+        </label>
+        <label id="lib-folder" for="lib-dir" class="btn icon" title="Add every style in a folder" hidden>
           <svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h4l1.6 1.8h7.4A1.5 1.5 0 0 1 17 4.3V8h-1.6V4.4H7.4L5.8 2.6H2.6v10.8h8.9V15H2.5A1.5 1.5 0 0 1 1 13.5z"/><path d="M15 9h1.6v2.4H19V13h-2.4v2.4H15V13h-2.4v-1.6H15z"/></svg>
-        </button>
-        <input id="lib-files" type="file" multiple hidden>
-        <input id="lib-dir" type="file" multiple webkitdirectory hidden>
+          <span class="sr-only">Add a folder of styles</span>
+        </label>
+        <!-- accept names the types, so iOS opens Files straight away instead of its Photo / Camera / Files menu (an
+             app without camera and photo permissions can crash on that menu). octet-stream = any data file, so the
+             style extensions iOS doesn't know aren't greyed out. -->
+        <input id="lib-files" class="sr-only" type="file" multiple tabindex="-1" accept=".sty,.STY,.prs,.PRS,.bcs,.BCS,.sst,.SST,.stl,.STL,.sth,.STH,.zip,.ZIP,application/zip,application/octet-stream">
       </div>
       <div class="search">
         <span class="search-box">
@@ -46,78 +52,32 @@
       <div class="lib-count" id="lib-count"></div>
     </div>
 
-    <div class="side-pane settings-pane" id="pane-settings" hidden>
-      <div class="settings-head"><span>MIDI SETTINGS</span><button id="settings-close" class="btn ed-nav" type="button" aria-label="Close the settings">✕</button></div>
-      <div class="group-title">KEYBOARD</div>
-      <label class="field" title="The MIDI input your keyboard is on.">PORT
-        <select id="kb-port"></select>
-      </label>
-      <label class="field" title="The channel your keyboard sends on. Any = all channels.">CHANNEL
-        <select id="kb-channel"></select>
-      </label>
-      <div class="field" title="Keys below the split play chords; the split key and above are the right hand.">SPLIT
-        <select id="kb-split"></select>
-        <button id="kb-learn" class="btn" type="button" aria-pressed="false">LEARN</button>
-      </div>
-      <div class="field" title="Keep the chord when you let go of the keys, as on arranger keyboards.">CHORD LATCH
-        <button id="chord-memory" class="btn onoff" type="button" aria-pressed="true">ON</button>
-      </div>
-      <div class="field" title="While the style is stopped, playing a chord below the split starts it (like SYNC START, but always on).">CHORD STARTS STYLE
-        <button id="chord-start" class="btn onoff" type="button" aria-pressed="false">OFF</button>
-      </div>
-      <div class="group-title">OUTPUT</div>
-      <label class="field" title="Where the style plays: a synth, or the host's MIDI input. Each part has its own channel (see PARTS under the keyboard).">PORT
-        <select id="out-port"></select>
-      </label>
-      <label class="field" title="Send MIDI clock (start, 24 clocks a quarter note, stop) so a looper or DAW follows the arranger's tempo. Can be the same port as the output.">CLOCK PORT
-        <select id="clock-port"></select>
-      </label>
-      <label class="field" title="Send the keys from the split up to this channel, so the right hand plays a sound too.">RIGHT HAND
-        <select id="rh-channel"></select>
-      </label>
-      <div class="group-title">CONTROLS</div>
-      <div class="note">Play the buttons from a foot switch, pads or a controller: tap LEARN, then press the switch (a CC, note or program change). LATCH is for pedals that send on / off on alternate presses.</div>
-      <div id="controls-list"></div>
-      <div class="group-title">STORAGE</div>
-      <div class="note" id="storage-status">Checking…</div>
-      <div class="field" title="Save the style library (files, favorites, tempos) as one zip file, to keep a copy or move it to another device.">BACKUP
-        <button id="lib-backup" class="btn" type="button" title="Save every style as a zip">ALL</button>
-        <button id="lib-backup-fav" class="btn" type="button" title="Save only the favorite (starred) styles as a zip">FAVORITES</button>
-      </div>
-      <div class="field">LIBRARY
-        <button id="lib-restore" class="btn" type="button" title="Add the styles from a backup zip, or from any zip of .sty / .stl / .sth files">RESTORE</button>
-        <input id="lib-zip" type="file" accept=".zip,.ZIP,application/zip" hidden>
-        <button id="lib-clear-all" class="btn danger" type="button" title="Remove every style from the library on this device. Save a backup first if you want to keep a copy.">CLEAR ALL</button>
-      </div>
-    </div>
   </aside>
 
   <main class="main">
+    <!-- Layout "1 · Big controls, PARTS on demand" (the iPad mock-ups, 2026-11-25). -->
     <section class="top-row">
       <div class="chord-panel">
         <div class="chord-label">CHORD</div>
         <div class="chord" id="chord">–</div>
+        <div class="counter" id="counter"></div>
       </div>
       <div class="style-panel">
         <button id="style-delete" class="btn style-delete" type="button" aria-label="Delete this style from the library" hidden></button>
         <div class="chord-label">STYLE</div>
         <div class="style-title">
           <button id="style-fav" class="star" type="button" aria-pressed="false" title="Favorite: the ★ above the style list shows only favorites" hidden>
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.3L12 17.1l-5.7 3.1 1.2-6.3-4.7-4.4 6.4-.8z"/></svg>
+            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.3L12 17.1l-5.7 3.1 1.2-6.3-4.7-4.4 6.4-.8z"/></svg>
           </button>
           <span class="style-name" id="style-name">No style loaded</span>
         </div>
         <div class="style-sum" id="style-sum">Add styles with + (files) or the folder button, then tap one.</div>
-        <div class="sections" id="style-sections"></div>
-        <div class="transport">
-          <button id="start" class="btn big" type="button" title="Start / stop at once. Space bar: start with Intro A, then the first ending; space during the ending stops at once.">START</button>
-          <button id="sync" class="btn" type="button" aria-pressed="false" title="Start with the first chord you play">SYNC START</button>
-          <button id="autofill" class="btn" type="button" aria-pressed="true" title="Play a fill when changing main">AUTO FILL</button>
+        <div class="style-pills">
           <div class="tempo pill">
             <button id="tempo-down" class="btn" type="button" aria-label="Slower">−</button>
-            <span id="tempo" class="tempo-val" title="Tempo (quarter notes per minute). Double-tap: the style's own tempo.">120</span>
+            <span id="tempo" class="tempo-val" title="Tempo (quarter notes per minute). Tap: the style's own tempo.">120</span>
             <button id="tempo-up" class="btn" type="button" aria-label="Faster">+</button>
-            <button id="tap" class="btn" type="button" title="Tap the beat (quarter notes) to set the tempo">TAP</button>
+            <button id="tap" class="btn tap" type="button" title="Tap the beat (quarter notes) to set the tempo">TAP</button>
           </div>
           <div class="tempo pill" title="The style's overall volume (scales every part's volume). Saved for this style.">
             <span class="vol-label">VOL</span>
@@ -125,39 +85,135 @@
             <span id="vol" class="tempo-val" title="Tap: back to 100%">100%</span>
             <button id="vol-up" class="btn" type="button" aria-label="Louder">+</button>
           </div>
-          <div class="counter" id="counter"></div>
-          <button id="panic" class="btn panic" type="button" title="Stop every note on all 16 channels (all sound off, all notes off, sustain off)">PANIC</button>
         </div>
       </div>
     </section>
-    <section class="keys-panel">
-      <svg id="keys" class="keys" viewBox="0 0 490 70" preserveAspectRatio="none" aria-label="Keyboard"></svg>
-      <div class="keys-legend"><span id="split-label"></span></div>
+    <section class="sections-panel" id="style-sections"></section>
+    <section class="transport">
+      <button id="start" class="btn big" type="button" title="Starts with the selected intro; stops with the selected ending (tap again during the ending: stop at once). Tap a selected INTRO or ENDING again for none. Space bar: the same.">START</button>
+      <label class="check" title="Start with the first chord you play"><input id="sync" type="checkbox"> SYNC START</label>
+      <label class="check" title="Play a fill when changing main"><input id="autofill" type="checkbox" checked> AUTO FILL</label>
+      <button id="panic" class="btn panic" type="button" title="Stop every note on all 16 channels (all sound off, all notes off, sustain off)">PANIC</button>
+    </section>
+    <section class="parts">
+      <button id="parts-toggle" class="parts-bar" type="button" aria-expanded="false" aria-controls="style-parts">
+        <span class="parts-bar-title" id="parts-arrow">PARTS ▸</span><span class="parts-bar-sum" id="parts-sum"></span>
+      </button>
+      <div id="style-parts" hidden></div>
     </section>
     <section class="info-row">
-      <div class="parts"><div class="chord-label">PARTS</div><div id="style-parts"></div></div>
       <div class="msgs" id="msgs"></div>
     </section>
   </main>
 
+  <!-- Settings: a window over the whole page (✕, Escape or a tap outside closes it). -->
+  <div class="modal" id="settings-modal" hidden>
+    <div class="modal-panel" id="pane-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="settings-head"><span id="settings-title">SETTINGS</span>
+        <span class="settings-head-btns">
+          <button id="settings-close" class="btn ed-nav" type="button" aria-label="Close the settings">✕</button>
+        </span>
+      </div>
+      <div class="settings-grid">
+        <section class="set-group">
+          <div class="group-title">KEYBOARD</div>
+          <label class="field" title="The MIDI input your keyboard is on.">PORT
+            <select id="kb-port"></select>
+            <button id="midi-refresh" class="btn port-refresh" type="button" aria-label="Refresh the MIDI ports" title="Get a fresh list of MIDI ports">
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+            </button>
+          </label>
+          <label class="field" title="The channel your keyboard sends on. Any = all channels.">CHANNEL
+            <select id="kb-channel"></select>
+          </label>
+          <div class="field" title="Keys below the split play chords; the split key and above are the right hand.">SPLIT
+            <select id="kb-split"></select>
+            <button id="kb-learn" class="btn" type="button" aria-pressed="false">LEARN</button>
+          </div>
+          <label class="check" title="Keep the chord when you let go of the keys, as on arranger keyboards.">
+            <input id="chord-memory" type="checkbox" checked> CHORD LATCH
+          </label>
+          <label class="check" title="While the style is stopped, playing a chord below the split starts it (like SYNC START, but always on).">
+            <input id="chord-start" type="checkbox"> CHORD STARTS STYLE
+          </label>
+        </section>
+        <section class="set-group">
+          <div class="group-title">OUTPUT</div>
+          <label class="field" title="MIDI PORT: send the style to a synth or the host's MIDI input. SOUNDFONT: play it here, through a .sf2 bank on this device.">SOUND
+            <select id="out-mode">
+              <option value="midi">MIDI PORT</option>
+              <option value="synth">SOUNDFONT</option>
+            </select>
+          </label>
+          <label class="field" id="out-port-field" title="Where the style plays: a synth, or the host's MIDI input. Each part has its own channel (see PARTS under the keyboard).">PORT
+            <select id="out-port"></select>
+          </label>
+          <div class="field" id="sf-field" title="A General MIDI bank: .sf2 (not .sf3 or .dls; convert those with Polyphone). It's kept on this device and loads again next time." hidden>BANK
+            <!-- A label for the input, as for the style files: iPad web views open the picker more reliably that way.
+                 accept names the types, or iOS shows its Photo / Camera menu, which can crash the app. -->
+            <label for="sf-file" class="btn">CHOOSE…</label>
+            <input id="sf-file" class="sr-only" type="file" tabindex="-1" accept=".sf2,.SF2,application/octet-stream">
+            <span class="sf-name" id="sf-name"></span>
+          </div>
+          <div class="note" id="sf-status" hidden></div>
+          <div class="note" id="sf-mem-note" hidden>The page's memory goes up by about the size of the .sf2 file. Smaller files perform better, especially on older devices.</div>
+          <label class="field" title="Send MIDI clock (start, 24 clocks a quarter note, stop) so a looper or DAW follows the arranger's tempo. Can be the same port as the output.">CLOCK PORT
+            <select id="clock-port"></select>
+          </label>
+          <label class="field" title="Send the keys from the split up to this channel, so the right hand plays a sound too.">RIGHT HAND
+            <select id="rh-channel"></select>
+          </label>
+          <div class="note" id="rh-note" hidden>With SOUNDFONT output the right hand plays with a delay, depending on the complexity of the current style. For the lowest latency, use MIDI PORT output to a hardware or app synth.</div>
+        </section>
+        <section class="set-group">
+          <div class="group-title">STORAGE</div>
+          <div class="note" id="storage-status">Checking…</div>
+          <div class="field" title="Save the style library (files, favorites, tempos) as one zip file, to keep a copy or move it to another device.">BACKUP
+            <button id="lib-backup" class="btn" type="button" title="Save every style as a zip">ALL</button>
+            <button id="lib-backup-fav" class="btn" type="button" title="Save only the favorite (starred) styles as a zip">FAVORITES</button>
+          </div>
+          <div class="field">LIBRARY
+            <!-- A label for the input, as + is: iPad web views often ignore a script opening a hidden file input. -->
+            <label id="lib-restore" for="lib-zip" class="btn" title="Add the styles from a backup zip, or from any zip of .sty / .stl / .sth files">RESTORE</label>
+            <input id="lib-zip" class="sr-only" type="file" tabindex="-1" accept=".zip,.ZIP,application/zip,application/octet-stream">
+        <button id="lib-clear-all" class="btn danger" type="button" title="Remove every style from the library on this device. Save a backup first if you want to keep a copy.">CLEAR ALL</button>
+          </div>
+        </section>
+        <section class="set-group">
+          <div class="group-title">LAYOUT</div>
+          <label class="check" title="Group the style list by folder, each under a header that opens and closes it. Off: one list of every style, A to Z.">
+            <input id="show-folders" type="checkbox" checked> SHOW FOLDERS
+          </label>
+        </section>
+        <section class="set-group wide">
+          <div class="group-title">CONTROLS</div>
+          <div class="note">Play the buttons from a foot switch, pads or a controller: tap LEARN, then press the switch (a CC, note or program change).</div>
+          <div id="controls-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
   <script src="chord-names.js?v=3"></script>
-  <script src="chord-detector.js?v=37"></script>
+  <script src="chord-detector.js?v=48"></script>
   <script src="keyboard-input.js?v=3"></script>
-  <script src="midi-ports.js?v=3"></script>
+  <script src="midi-ports.js?v=75"></script>
   <script src="smf.js?v=3"></script>
-  <script src="style.js?v=22"></script>
+  <script src="style.js?v=46"></script>
   <script src="sty-reader.js?v=24"></script>
-  <script src="stl-reader.js?v=32"></script>
+  <script src="stl-reader.js?v=62"></script>
   <script src="style-files.js?v=21"></script>
-  <script src="style-library.js?v=26"></script>
+  <script src="style-library.js?v=46"></script>
   <script src="zip.js?v=9"></script>
-  <script src="library-backup.js?v=25"></script>
+  <script src="library-backup.js?v=47"></script>
   <script src="meter.js?v=3"></script>
   <script src="transposer.js?v=3"></script>
-  <script src="section-flow.js?v=3"></script>
-  <script src="channel-map.js?v=30"></script>
-  <script src="player.js?v=38"></script>
-  <script src="controls.js?v=11"></script>
-  <script src="app.js?v=39"></script>
+  <script src="section-flow.js?v=100"></script>
+  <script src="gm-names.js?v=57"></script>
+  <script src="channel-map.js?v=66"></script>
+  <script src="player.js?v=102"></script>
+  <script src="sf-synth.js?v=13"></script>
+  <script src="controls.js?v=76"></script>
+  <script src="app.js?v=125"></script>
 </body>
 </html>

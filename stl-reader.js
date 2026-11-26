@@ -17,9 +17,9 @@
 //     (Advanced, when different).
 //   Events, 6 bytes: [delta, type, part, d1, d2, d3]; type 0x8F ends the list. delta is the wait after the event
 //     (read the other way, 5.3% of notes would overlap their own next strike instead of 0.4%).
-//     type < 0x80: note, d1 velocity, d2-d3 duration: (d2 & 0x3F) << 8 | d3. Bit 0x80 of d2 marks a tie (the same
-//       note carried on, long notes come in 255-tick pieces): it extends the note before it instead of striking
-//       again. Bit 0x40 is a flag whose meaning isn't known (ignored).
+//     type < 0x80: note, d1 velocity, d2-d3 duration: (d2 & 0x3F) << 8 | d3. Long notes come in pieces of up to 255
+//       ticks: the first has bit 0x80 of d2 set ("continued"), the next ones a velocity byte with its top bit set
+//       (mostly 0xC0): they extend the note instead of striking it again. Bit 0x40 of d2: meaning unknown (ignored).
 //     0xE5 program change (d2 = program)   0xE6 control change (d2 = controller, d3 = value)
 //     0xEB pitch bend (d2 = LSB, d3 = MSB)   0x80 a step with no event (long gaps)   0xEA and 0x8A unknown (skipped)
 //     Anything else means the list has run into other data: it ends there (a warning says so).
@@ -67,10 +67,12 @@
       if (!partOk || (type >= 0x80 && !EVENT_TYPES[type])) { broken = true; break; }
       if (type < 0x80) {
         const duration = Math.max(1, ((d2 & 0x3F) << 8) | d3);
-        // A tie carries on the same note that is still sounding: it gets longer instead of struck again.
-        const held = d2 & 0x80 ? findHeld(events, type, t) : null;
+        // A velocity byte with its top bit set (mostly 0xC0) continues the same note, still sounding: it gets longer
+        // instead of struck again (271,000 of them in the Roland files, 98% right after a held note of that pitch).
+        // Without a held note (a list's start), it plays at the velocity in its low bits.
+        const held = d1 & 0x80 ? findHeld(events, type, t) : null;
         if (held) held.duration = Math.max(held.duration, t + duration - held.tick);
-        else if (d1 > 0) events.push({ tick: t, type: 'note', note: type, velocity: Math.min(127, d1), duration });
+        else if (d1 & 0x7F) events.push({ tick: t, type: 'note', note: type, velocity: d1 & 0x7F, duration });
       } else if (type === 0xE5) events.push({ tick: t, type: 'program', program: d2 & 0x7F });
       else if (type === 0xE6) events.push({ tick: t, type: 'cc', cc: d2 & 0x7F, value: d3 & 0x7F });
       else if (type === 0xEB) events.push({ tick: t, type: 'pitchBend', value: (d2 & 0x7F) | ((d3 & 0x7F) << 7) });

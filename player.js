@@ -18,6 +18,11 @@
 //   press(kind, letter)                the section buttons (SectionFlow.press)
 //   setChord(chord)                    the held chord; while playing, sounding notes follow it (each pattern's
 //                                      retrigger rule) and patterns that start playing for it come in at once
+//   setNoteFloors({ partId: note })    notes of that part below `note` (as written in the pattern) aren't played:
+//                                      Roland guitar parts use keys far below a guitar's range for strum / fret
+//                                      noises, which a GM guitar plays as very low notes
+//   setSoloPercussion(on)              only the drum parts play (the others are silent until it's turned off); turning
+//                                      it on ends the other parts' sounding notes at once
 //   setTempo(bpm)                      quarter notes per minute
 //   setVolume(factor)                  the style's overall volume, 0..1.5 (1 = as written): every part's volume
 //                                      (CC 7: the style's own, at its start and in its patterns; 100 where it sets none)
@@ -54,6 +59,8 @@
       this.style = null; this.flow = null; this.meter = null; this.map = null;
       this.tempo = 120; this.chord = null;
       this.volume = 1;
+      this.floors = {};
+      this.soloPercussion = false;
       this.baseVolume = {};          // channel -> the last CC 7 value the style asked for (before scaling)
       this.playing = false; this.handle = null;
       this.seg = null;               // { section, anchorTick, anchorTime, mspt, time }: the timeline being scheduled
@@ -95,6 +102,7 @@
       const batch = [];
       this.style.parts.forEach((p) => this.map.voiceMessages(p).forEach((m) => batch.push({ time: t0 - START_DELAY, kind: 'ctl', data: m })));
       this.levels(t0 - START_DELAY, batch, true);
+      this.neutral(t0 - START_DELAY, batch);
       this.history = [];
       this.newSeg(first, t0);
       this.playing = true;
@@ -126,10 +134,14 @@
       this.flow = new SectionFlow(next.style.order);
       this.flow.autoFill = autoFill;
       this.flow.press('main', 'A');
+      const intro = this.flow.intro;                 // straight into Main A (no intro); the intro stays selected
+      this.flow.intro = null;
       const first = this.flow.start();
+      this.flow.intro = intro;
       this.tempo = Math.max(20, Math.min(400, next.tempo || next.style.tempo));
       next.style.parts.forEach((p) => this.map.voiceMessages(p).forEach((m) => batch.push({ time: at, kind: 'ctl', data: m })));
       this.levels(at, batch, true);
+      this.neutral(at, batch);
       if (!first) { this.releaseAll(at, batch); this.playing = false; this.stopAt = at; return false; }
       this.newSeg(first, at);
       return true;
@@ -143,6 +155,7 @@
       if (this.flow) this.flow.stop();
       const batch = [];
       this.releaseAll(this.clock(), batch);
+      if (was) this.neutral(this.clock(), batch);
       if (was && this.sendClock) batch.push({ time: this.clock(), kind: 'clock', data: [0xFC] });
       this.flush(batch);
       this.seg = null;
@@ -155,6 +168,14 @@
       this.onChange();
     }
 
+    setNoteFloors(map) { this.floors = Object.assign({}, map || {}); }
+    setSoloPercussion(on) {
+      this.soloPercussion = !!on;
+      if (!this.soloPercussion || !this.playing) return;
+      const batch = [], now = this.clock();
+      this.sounding.slice().forEach((s) => { if (s.part && s.part.role !== 'drums') this.end(s, Math.max(now, s.on), batch); });
+      this.flush(batch);
+    }
     setVolume(factor) {
       const v = Math.max(0, Math.min(1.5, Number(factor)));
       if (!(v >= 0) || v === this.volume) return;
@@ -194,11 +215,43 @@
       if (!this.playing || !chord || N.sameChord(old, chord)) return;
       const now = this.clock(), batch = [];
       this.revoice(now, old, batch);
-      // Patterns that didn't play for the old chord come in now, for the stretch already scheduled ahead.
+      // Patterns that didn't play for the old chord come in now: their notes already under way (a Roland style's
+      // major strings when the chord goes from Dm to G), then the stretch already scheduled ahead.
       const sec = this.style.sections[this.seg.section];
       const from = Math.max(0, this.timeToTick(now));
-      if (from < this.done) this.emit(sec, from, this.done, batch, (pat) => !this.playedFor(pat, old));
+      const fresh = (pat) => !this.playedFor(pat, old);
+      this.enterHeld(sec, from, now, batch, fresh);
+      if (from < this.done) this.emit(sec, from, this.done, batch, fresh);
       this.flush(batch);
+    }
+    // The notes of patterns coming in (only(pat)) that started before tick from and are still going: played from now
+    // for the time they have left, as re-pitched notes are (more than a 16th, and not for a 'stop' rule).
+    enterHeld(sec, from, now, batch, only) {
+      const minMs = this.style.ppq / 4 * this.seg.mspt;
+      Object.keys(sec.tracks).forEach((pid) => {
+        const part = this.parts[pid];
+        const ch = part ? this.map.channel(pid) : 0;
+        if (!ch || (this.soloPercussion && part.role !== 'drums')) return;
+        const boost = this.map.get(pid).velocity, floor = this.floors[pid] || 0;
+        sec.tracks[pid].patterns.forEach((pat) => {
+          if (!this.playedFor(pat, this.chord) || !only(pat) || pat.rule.retrigger === 'stop') return;
+          const loop = pat.loopTicks > 0 && pat.loopTicks < sec.lengthTicks ? pat.loopTicks : sec.lengthTicks;
+          const base = Math.floor(from / loop) * loop;
+          pat.events.forEach((e) => {
+            if (e.type !== 'note' || e.note < floor || e.tick >= loop) return;
+            const tick = base + e.tick, end = Math.min(tick + e.duration, base + loop, sec.lengthTicks);
+            if (tick >= from || end <= from) return;
+            const off = this.tickToTime(end);
+            if (off - now < minMs) return;
+            const n = T.note(e.note, pat.rule, this.chord);
+            const prev = this.sounding.find((s) => s.ch === ch && s.note === n && s.off > now);
+            if (prev) this.end(prev, Math.max(now, prev.on), batch);
+            const vel = boost ? Math.max(1, Math.min(127, e.velocity + boost)) : e.velocity;
+            batch.push({ time: now, kind: 'on', data: [0x90 | (ch - 1), n, vel] });
+            this.sounding.push({ ch, note: n, src: e.note, vel, on: now, off, pattern: pat, part });
+          });
+        });
+      });
     }
     playedFor(pat, chord) {
       if (!chord) return T.rhythmOnly(pat.rule);
@@ -220,6 +273,19 @@
         if (s.on <= now && s.off - at < minMs) return;
         batch.push({ time: at, kind: 'on', data: [0x90 | (s.ch - 1), n, s.vel] });
         this.sounding.push({ ch: s.ch, note: n, src: s.src, vel: s.vel, on: at, off: s.off, pattern: s.pattern });
+      });
+    }
+
+    // Pitch bend back to the centre and the mod wheel to 0 on the style's channels. A pattern that bends or adds
+    // vibrato (Survive Disco's Intro B guitar) sets them back at its end, but not when it's cut short by STOP, a style
+    // change or the next section: the channel then stayed bent / wobbling ("a siren") until the page was reloaded.
+    neutral(at, batch) {
+      const done = {};
+      this.style.parts.forEach((p) => {
+        const ch = this.map.get(p.id).channel;
+        if (!ch || done[ch]) return;
+        done[ch] = true;
+        batch.push({ time: at, kind: 'ctl', data: [0xE0 | (ch - 1), 0, 64] }, { time: at, kind: 'ctl', data: [0xB0 | (ch - 1), 1, 0] });
       });
     }
 
@@ -262,6 +328,7 @@
         if (next === 'stop') {
           this.flushOffs(at, batch);
           this.releaseAll(at, batch);
+          this.neutral(at, batch);
           if (this.sendClock) batch.push({ time: at, kind: 'clock', data: [0xFC] });
           this.playing = false;
           if (this.handle != null) { this.timer.cancel(this.handle); this.handle = null; }
@@ -271,6 +338,7 @@
         if (next === null && !ended) continue;
         this.flushOffs(at, batch);
         this.cut(at, batch);
+        if (next && next !== this.seg.section) this.neutral(at, batch);
         this.newSeg(next || this.seg.section, at);
       }
       this.flushOffs(horizon, batch);
@@ -287,7 +355,9 @@
         const part = this.parts[pid];
         const ch = part ? this.map.channel(pid) : 0;
         if (!ch) return;
+        if (this.soloPercussion && part.role !== 'drums') return;
         const boost = this.map.get(pid).velocity;
+        const floor = this.floors[pid] || 0;
         sec.tracks[pid].patterns.forEach((pat) => {
           if (!this.playedFor(pat, this.chord)) return;
           if (only && !only(pat)) return;
@@ -300,13 +370,14 @@
               if (e.tick >= loop || tick < from || tick >= to || tick >= sec.lengthTicks) return;
               const time = this.tickToTime(tick);
               if (e.type === 'note') {
+                if (e.note < floor) return;
                 const n = T.note(e.note, pat.rule, this.chord);
                 const prev = this.sounding.find((s) => s.ch === ch && s.note === n && s.off > time);
                 if (prev) this.end(prev, Math.max(time, prev.on), batch);
                 const end = Math.min(tick + e.duration, base + loop, sec.lengthTicks);
                 const vel = boost ? Math.max(1, Math.min(127, e.velocity + boost)) : e.velocity;
                 batch.push({ time, kind: 'on', data: [0x90 | (ch - 1), n, vel] });
-                this.sounding.push({ ch, note: n, src: e.note, vel, on: time, off: this.tickToTime(end), pattern: pat });
+                this.sounding.push({ ch, note: n, src: e.note, vel, on: time, off: this.tickToTime(end), pattern: pat, part });
               } else {
                 const f = this.map.filter(part, e);
                 const bytes = f && eventBytes(f, ch);

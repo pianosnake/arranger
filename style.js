@@ -90,7 +90,26 @@
     return `${style.timeSig[0]}/${style.timeSig[1]} · ${Math.round(style.tempo)} bpm`;
   }
 
-  const Style = { KINDS, ROLES, NTR, NTT, RETRIGGER, BUTTON_ORDER, barTicks, kindOf, validate, summary };
+  // A hash of the style's music: everything the reader made of the file (format family, timing, tempo, meter, parts
+  // and their voices, every section with its patterns, rules and events), without names or warnings. Two files with
+  // the same music get the same hash even when their bytes differ (another name, another editor). 64 bits, as
+  // 16 hex digits: two FNV-1a hashes with different seeds over the same text.
+  function musicHash(style) {
+    const skip = { name: true, warnings: true };
+    const text = JSON.stringify({
+      source: style.source, ppq: style.ppq, tempo: Math.round(style.tempo * 100) / 100, timeSig: style.timeSig,
+      parts: style.parts, order: style.order, sections: style.order.map((id) => style.sections[id]),
+    }, (k, v) => (skip[k] ? undefined : v));
+    let a = 0x811C9DC5, b = 0x01000193 ^ 0x5BD1E995;
+    for (let k = 0; k < text.length; k++) {
+      const c = text.charCodeAt(k);
+      a ^= c; a = Math.imul(a, 0x01000193) >>> 0;
+      b ^= c; b = Math.imul(b, 0x01000193 ^ 0x2C1B3C6D) >>> 0; b = (b ^ (b >>> 15)) >>> 0;
+    }
+    return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
+  }
+
+  const Style = { KINDS, ROLES, NTR, NTT, RETRIGGER, BUTTON_ORDER, barTicks, kindOf, validate, summary, musicHash };
   if (isNode) module.exports = Style;
   else (window.Arranger = window.Arranger || {}).Style = Style;
 }());

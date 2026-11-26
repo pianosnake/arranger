@@ -40,8 +40,7 @@ body {
 .brand { display: flex; align-items: flex-start; gap: 12px; }
 .logo .model { font: 900 24px/1 var(--title-font); letter-spacing: -.5px; color: var(--accent); }
 .brand .side-gear { margin-left: auto; padding: 5px 7px; }   /* top right (.brand: beats the .btn margin below) */
-/* The settings take over the whole left panel: no logo row or status line above them. */
-.side.settings-open > .brand, .side.settings-open > .status-line { display: none; }
+
 .status-line { font-size: 11px; color: var(--text-dim); min-height: 14px; }
 .status { font-weight: 700; }
 .status.on { color: #7fd17f; }
@@ -69,7 +68,7 @@ body {
 .btn.danger.confirm { background: #6b3b37; color: #fff; }
 .ctl-row { border-bottom: 1px solid #2a2c31; padding: 4px 0; display: flex; flex-direction: column; gap: 3px; }
 .ctl-line { display: flex; align-items: center; gap: 4px; }
-.ctl-name { width: 86px; font-size: 12px; color: var(--text); }
+.ctl-name { width: 118px; font-size: 12px; color: var(--text); }
 .ctl-what { flex: 1; min-width: 0; font: 11px var(--lcd-font); color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ctl-row.set .ctl-what { color: var(--lcd-text); }
 .ctl-row .btn { min-height: 22px; padding: 1px 6px; font-size: 10px; }
@@ -117,7 +116,8 @@ body {
 .folder-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .folder-count { color: var(--text-dim); font-weight: 400; }
 .row { display: flex; align-items: center; gap: 6px; padding: 6px 2px; border-bottom: 1px solid #2a2c31; cursor: pointer; }
-.row.on { background: #3a3024; }
+.row.on { background: #4a3a22; box-shadow: inset 3px 0 0 var(--accent); }
+.row.on .row-name { color: var(--accent-soft); }
 .row .row-main { flex: 1; min-width: 0; }
 .row .row-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row .row-sub { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -126,7 +126,7 @@ body {
 
 /* ---------- main ---------- */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 12px; overflow-y: auto; }
-.top-row { display: flex; gap: 12px; }
+.top-row { display: flex; gap: 12px; align-items: flex-start; }
 .chord-panel, .style-panel { background: var(--lcd); border: 1px solid var(--border); border-radius: 4px; padding: 10px 16px 14px; }
 .chord-panel { flex: none; width: 33.333%; display: flex; flex-direction: column; align-items: center; }
 .style-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; position: relative; }
@@ -167,9 +167,13 @@ body {
 .counter .sep { color: #444; margin: 0 1px; }
 .btn.panic { margin-left: auto; color: #e0796f; border-color: #6b3b37; }
 .info-row { display: flex; gap: 12px; align-items: flex-start; }
-.parts { flex: 1; font-size: 12px; color: var(--text-dim); }
-.part-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
-.part-row .part-name { width: 74px; color: var(--text); }
+.parts { font-size: 12px; color: var(--text-dim); margin-top: 10px; border-top: 1px solid #2a2c31; padding-top: 8px; }
+.part-row { display: grid; grid-template-columns: 76px 56px 78px 44px 74px minmax(0, 1fr); align-items: center; column-gap: 8px; padding: 2px 0; }
+.part-row .part-name { color: var(--text); }
+.part-row.part-head { font: 700 9px var(--ui-font); color: var(--text-dim); letter-spacing: .6px; border-bottom: 1px solid #2a2c31; padding-bottom: 3px; margin-bottom: 2px; }
+/* PRG CHANGE (3rd column) and MUTE (4th): checkbox and heading centred in their column. */
+.part-row .check { justify-self: center; }
+.part-row.part-head > span:nth-child(3), .part-row.part-head > span:nth-child(4) { text-align: center; }
 .part-row .part-voice { flex: 1; min-width: 0; font: 11px var(--lcd-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .part-row select {
   -webkit-appearance: none; appearance: none; border-radius: 0; margin: 0; cursor: pointer; width: 48px; text-align: center;
@@ -177,23 +181,13 @@ body {
   font: 13px/20px var(--lcd-font); padding: 1px 4px;
 }
 .part-row select[data-vel] { width: 58px; }
+.part-row select[data-ch] { width: 48px; }
 .part-row .btn { min-height: 24px; padding: 2px 6px; font-size: 10px; }
 .part-row.active .part-name { color: var(--accent-soft); }
 .msgs { flex: 1; font-size: 12px; color: var(--text-dim); line-height: 1.5; max-height: 200px; overflow-y: auto; }
 .msgs .warn { color: #e0b46f; }
 .chord-label { align-self: flex-start; font: 700 10px var(--ui-font); color: var(--text-dim); letter-spacing: .8px; }
 .chord { font: 700 80px/1.1 var(--lcd-font); color: var(--lcd-text); min-height: 90px; white-space: nowrap; }
-.keys-panel { display: flex; flex-direction: column; gap: 4px; }
-.keys { width: 100%; height: 110px; display: block; }
-.keys .w { fill: #f2f2f2; stroke: #222; stroke-width: .6; }
-.keys .b { fill: #1b1b1d; stroke: #000; stroke-width: .6; }
-.keys .w.right { fill: #9c9ea5; }             /* the right hand: not used for chords */
-.keys .b.right { fill: #4a4c52; }
-.keys .w.held { fill: var(--accent); }
-.keys .b.held { fill: var(--accent); }
-.keys .split { stroke: #e0796f; stroke-width: 1.6; }
-.keys .label { font: 6px var(--ui-font); fill: #666; }
-.keys-legend { font-size: 11px; color: var(--text-dim); }
 
 @media (max-width: 640px) {
   body { flex-direction: column; }
@@ -202,4 +196,273 @@ body {
   .top-row, .info-row { flex-direction: column; }
   .chord-panel { width: auto; }
   .list { max-height: 40vh; }
+}
+
+/* ---------- settings window ---------- */
+.modal {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 50; background: rgba(0, 0, 0, .55);
+  display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.modal-panel {
+  width: 100%; max-width: 980px; background: var(--side); border: 1px solid var(--border); border-radius: 6px;
+  padding: 12px 16px 16px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+}
+.modal-panel .settings-head { font-size: 13px; margin-bottom: 10px; }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; align-items: start; }
+.set-group { background: var(--panel-2, #24262b); border: 1px solid #34363c; border-radius: 4px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+.set-group .group-title { margin: 0 0 2px; border-top: 0; padding-top: 0; color: var(--accent-soft); }
+.set-group.wide { grid-column: 1 / -1; }
+/* The controls list in columns when there's room, top to bottom, then the next column. */
+.set-group.wide #controls-list { columns: 280px 3; column-gap: 16px; }
+.set-group.wide #controls-list .ctl-row { -webkit-column-break-inside: avoid; break-inside: avoid; }
+@media (max-width: 640px) { .modal { padding: 0; } .modal-panel { border-radius: 0; min-height: 100%; } }
+
+/* Checkboxes for on / off settings. */
+.check { display: flex; align-items: center; gap: 8px; font: 700 10px var(--ui-font); color: var(--text-dim); letter-spacing: .5px; cursor: pointer; }
+.check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.check.small { gap: 4px; font-size: 9px; }
+.check.small input { width: 13px; height: 13px; }
+.transport .check { font-size: 11px; padding: 0 4px; }
+.part-row .check { flex: none; }
+
+.parts-sound-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* DEFAULTS, under the last part: greyed out when the style has no PARTS setup of its own. */
+.parts-foot { display: flex; justify-content: flex-end; border-top: 1px solid #2a2c31; margin-top: 4px; padding-top: 6px; }
+.parts-foot .btn { min-height: 28px; padding: 0 12px; font-size: 11px; }
+.parts-foot .btn:disabled { opacity: .35; cursor: default; }
+
+/* A switch assigned to more than one action. */
+.ctl-row.clash .ctl-name, .ctl-row.clash .ctl-what { color: #e0796f; }
+.ctl-row.clash { background: rgba(224, 121, 111, .08); }
+
+
+/* ==========================================================================================================
+   Layout "1 · Big controls, PARTS on demand" (chosen 2026-11-25 from the iPad mock-ups). Overrides the sizes
+   above: touch targets 44 px and up, bigger type, the bar counter under the keyboard in the CHORD box.
+   ========================================================================================================== */
+.side { width: 280px; gap: 10px; padding: 14px 12px 10px; }
+.logo .model { font-size: 28px; }
+.brand { align-items: center; }
+.brand .side-gear { width: 48px; height: 48px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+.brand .side-gear svg { width: 22px; height: 22px; }
+.status-line { font-size: 14px; }
+.lib-tools .btn.icon { width: 48px; height: 48px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+.lib-tools .btn.icon svg { width: 22px; height: 22px; }
+.search-box input { height: 48px; font-size: 17px; border-radius: 8px; padding-left: 12px; }
+.search .star, .funnel { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+.search .star svg, .funnel svg { width: 24px; height: 24px; }
+.folder { font-size: 12px; line-height: 34px; }
+.row { padding: 9px 10px; }
+.row .row-name { font-size: 18px; }
+.row .row-sub { font-size: 13px; margin-top: 2px; }
+
+.main { gap: 14px; padding: 16px; }
+.top-row { align-items: stretch; gap: 14px; }
+.chord-panel { width: 250px; flex: none; border-radius: 8px; padding: 12px 14px; gap: 6px; }
+.chord { font-size: 92px; line-height: 1; min-height: 92px; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; }
+.chord-panel .counter { margin-top: 4px; font-size: 20px; min-height: 26px; text-align: center; }
+.style-panel { border-radius: 8px; padding: 12px 16px; gap: 8px; }
+.style-title { gap: 10px; }
+.style-name { font-size: 32px; }
+.style-sum { font-size: 16px; }
+.style-delete { width: 44px; height: 44px; top: 10px; right: 10px; }
+.style-pills { display: flex; flex-wrap: wrap; gap: 12px; margin-top: auto; }
+.tempo.pill { padding: 3px; gap: 4px; border-radius: 30px; }
+.tempo.pill .btn { width: 52px; height: 52px; min-height: 52px; padding: 0; border-radius: 26px; font-size: 26px; }
+.tempo.pill .btn.tap { width: auto; padding: 0 18px; font-size: 16px; background: #2d2f35; }
+.tempo.pill .tempo-val { font-size: 28px; min-width: 64px; }
+.tempo.pill .vol-label { font-size: 13px; padding-left: 13px; }
+
+.sections-panel { background: var(--lcd); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+.sections-panel:empty { display: none; }
+.sec-row { display: flex; align-items: flex-end; gap: 18px; }
+.sec-spacer { flex: 1; }
+.sec-group { display: flex; flex-direction: column; gap: 6px; }
+.sec-group .sec-title { font: 700 12px var(--ui-font); letter-spacing: 1px; color: var(--text-dim); }
+.sec-group .sec-btns { display: flex; gap: 6px; }
+.sections-panel .sec { width: 72px; height: 72px; min-height: 72px; border-radius: 12px; font-size: 24px; padding: 0; }
+.sections-panel .sec.wide { width: 110px; font-size: 18px; }
+.sec-mains { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sections-panel .sec-mains .sec { width: auto; height: 84px; border-radius: 14px; font-size: 30px; }
+.sections-panel .sec:disabled { opacity: 1; background: #1f2024; border-color: #34363c; color: #5d616b; }
+
+.transport { display: flex; align-items: center; gap: 16px; margin-top: 0; }
+.transport .btn.big { width: 200px; height: 72px; min-height: 72px; border-radius: 14px; font-size: 24px; font-weight: 800; letter-spacing: 1px; }
+.transport .check { font-size: 15px; height: 56px; gap: 10px; }
+.transport .check input { width: 26px; height: 26px; }
+.transport .btn.panic { margin-left: auto; height: 56px; padding: 0 22px; border-radius: 12px; font-size: 16px; }
+
+.parts { margin-top: 0; border-top: 0; padding-top: 0; display: flex; flex-direction: column; gap: 8px; }
+.parts-bar { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--border);
+  background: #1a1b1f; color: var(--text-dim); font: 16px var(--ui-font); cursor: pointer; text-align: left; }
+.parts-bar-title { font: 700 13px var(--ui-font); letter-spacing: 1px; color: var(--accent-soft); }
+#style-parts { background: var(--lcd); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.part-row { font-size: 15px; padding: 4px 0; }
+.part-row select { height: 36px; font-size: 16px; }
+.part-row .check input { width: 22px; height: 22px; }
+
+@media (max-width: 640px) {
+  .side { width: auto; }
+  .chord-panel { width: auto; }
+  .sec-row { flex-wrap: wrap; }
+}
+
+.settings-head-btns { display: flex; gap: 8px; }
+.settings-head-btns .btn { width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; }
+#midi-refresh.spin svg { animation: spin .4s linear; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Hidden from sight but not display:none (file inputs opened through their label). */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; opacity: 0; }
+label.btn.icon { cursor: pointer; }
+
+/* Narrow screens (an iPad in portrait: about 490 px right of the list): CHORD and STYLE stack full width, so the
+   tempo and VOL pills fit; INTRO / ENDING buttons are 64 px so both groups share a line, FILL and BREAK wrap below;
+   the transport row wraps instead of running off the edge. */
+@media (max-width: 1000px) {
+  .top-row { flex-direction: column; }
+  .chord-panel { width: auto; }
+  .style-panel { min-width: 0; }
+  .style-name { font-size: 28px; }
+  .style-pills > .pill { max-width: 100%; }
+  .sec-row { flex-wrap: wrap; gap: 12px; }
+  .sec-spacer { display: none; }
+  .sections-panel .sec { width: 64px; height: 64px; min-height: 64px; font-size: 22px; }
+  .sections-panel .sec.wide { width: auto; flex: 1 1 120px; }
+  .sections-panel .sec-mains .sec { height: 76px; }
+  .transport { flex-wrap: wrap; row-gap: 8px; }
+  .transport .btn.big { width: 170px; }
+}
+.parts-bar-title { white-space: nowrap; flex: none; }
+#settings-close { font-size: 26px; line-height: 1; font-weight: 400; }
+.settings-title-wrap { display: flex; align-items: center; gap: 12px; }
+.settings-title-wrap #midi-refresh { width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; }
+#start { background: #7fd17f; border-color: #7fd17f; color: #0d230d; }
+#start:disabled { background: #2b3a2b; border-color: #34463a; color: #5d6b5d; }
+/* The beat counter sits halfway between the keyboard and the bottom of the CHORD box. */
+.chord-panel .counter { margin-top: auto; margin-bottom: auto; }
+/* Playing: the button reads STOP and turns red. */
+#start.on { background: #e0514a; border-color: #e0514a; color: #fff; }
+#start { display: inline-flex; align-items: center; justify-content: center; gap: 12px; }
+#start .start-icon { width: 0.9em; height: 0.9em; flex: none; }
+/* The small refresh button after the keyboard PORT menu. */
+#midi-refresh.port-refresh { width: 30px; height: 30px; min-height: 30px; padding: 0; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; margin-left: 6px; }
+/* Very narrow (Split View beside a chord chart, phones): the performance controls first and compact enough to fit
+   one screen: chord + keyboard + counter on one line, the style name and pills, every section button, START; the
+   PARTS bar and the style list come after (the page scrolls). */
+@media (max-width: 640px) {
+  html, body { height: auto; overflow-x: hidden; overflow-y: auto; }
+  body { flex-direction: column; }
+  .main { order: 1; overflow: visible; padding: 10px; gap: 10px; }
+  .side { order: 2; width: auto; height: auto; align-self: stretch; border-bottom: 0; border-top: 4px solid var(--side-dark); }
+  .list { max-height: 70vh; }
+  .top-row { flex-direction: column; gap: 10px; }
+  .chord-panel { width: auto; flex-direction: row; align-items: center; gap: 12px; padding: 8px 12px; }
+  .chord-panel .chord-label, .style-panel > .chord-label, .style-sum { display: none; }
+  .chord { font-size: 48px; min-height: 48px; width: 120px; flex: none; }
+  .chord-panel .counter { margin: 0; font-size: 16px; min-height: 0; flex: none; }
+  .style-panel { padding: 8px 12px; gap: 6px; }
+  .style-delete { width: 36px; height: 36px; top: 6px; right: 6px; }
+  .style-title { padding-right: 44px; }
+  .style-name { font-size: 22px; }
+  .style-pills { gap: 8px; margin-top: 4px; }
+  .tempo.pill .btn { width: 44px; height: 44px; min-height: 44px; font-size: 22px; }
+  .tempo.pill .btn.tap { padding: 0 12px; font-size: 14px; }
+  .tempo.pill .tempo-val { font-size: 22px; min-width: 48px; }
+  .sections-panel { padding: 10px; gap: 8px; }
+  .sec-row { flex-wrap: wrap; gap: 8px 12px; }
+  .sec-spacer { display: none; }
+  .sections-panel .sec { width: 56px; height: 56px; min-height: 56px; font-size: 20px; border-radius: 10px; }
+  .sections-panel .sec.wide { width: auto; flex: 1 1 100px; font-size: 16px; }
+  .sections-panel .sec-mains .sec { width: auto; height: 64px; font-size: 26px; }
+  .transport { gap: 10px; flex-wrap: wrap; }
+  .transport .btn.big { width: 140px; height: 56px; min-height: 56px; font-size: 20px; }
+  .transport .check { height: 44px; font-size: 13px; }
+  .transport .btn.panic { height: 48px; padding: 0 14px; }
+}
+/* Very narrow: one line per style row: the name, then "4/4 · 124 bpm · Roland" small on the right. */
+@media (max-width: 640px) {
+  .row { padding: 10px 12px; }
+  .row .row-main { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .row .row-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .row-sub { flex: none; margin-top: 0; white-space: nowrap; }
+}
+
+/* OUTPUT › BANK: the loaded SoundFont's name, cut short when it's long. */
+.sf-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--text); letter-spacing: 0; }
+#sf-status.warn { color: #e0796f; }
+
+/* Very narrow, one screen (iPad Split View beside a chord chart, about 507 x 744): the header and the style list back
+   on top, made short (the list scrolls inside a few rows), and every control compact enough that the whole arranger
+   fits without scrolling the page. The header is one line: ARRANGER, the connection status, the gear. */
+@media (max-width: 640px) {
+  .side { order: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 10px; row-gap: 6px;
+    padding: 6px 10px 8px; border-top: 0; border-bottom: 4px solid var(--side-dark); }
+  .main { order: 1; padding: 8px 10px 10px; gap: 8px; }
+  .brand { display: contents; }
+  .logo { grid-column: 1; grid-row: 1; }
+  .logo .model { font-size: 20px; }
+  .status-line { grid-column: 2; grid-row: 1; font-size: 12px; min-height: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand .side-gear { grid-column: 3; grid-row: 1; width: 36px; height: 36px; }
+  .brand .side-gear svg { width: 18px; height: 18px; }
+  .side-pane { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; overflow: visible; }
+  .lib-tools { flex: none; }
+  .lib-tools .btn.icon { width: 36px; height: 36px; }
+  .lib-tools .btn.icon svg { width: 18px; height: 18px; }
+  .search { flex: 1; min-width: 0; }
+  .search-box input { height: 36px; font-size: 15px; }
+  .search .star, .funnel { width: 36px; height: 36px; }
+  .search .star svg, .funnel svg { width: 20px; height: 20px; }
+  .list { flex: none; width: 100%; height: 160px; max-height: none; }   /* about 5 styles */
+  .folder { line-height: 28px; }
+  .row { padding: 5px 10px; }
+  .row .row-name { font-size: 15px; }
+  .row .row-sub { font-size: 11px; }
+  .lib-count { display: none; }
+
+  .top-row { gap: 8px; }
+  .chord-panel { padding: 4px 10px; }
+  .chord { font-size: 36px; min-height: 40px; width: 104px; }
+  .style-panel { padding: 6px 10px; gap: 4px; }
+  .style-delete { width: 32px; height: 32px; }
+  .style-name { font-size: 18px; }
+  .style-title .star svg { width: 20px; height: 20px; }
+  .style-pills { margin-top: 2px; }
+  .tempo.pill .btn { width: 38px; height: 38px; min-height: 38px; font-size: 20px; }
+  .tempo.pill .tempo-val { font-size: 20px; min-width: 44px; }
+  .sections-panel { padding: 8px 10px; gap: 6px; }
+  .sec-row { gap: 6px 12px; }
+  .sec-group { gap: 3px; }
+  .sec-group .sec-title { font-size: 10px; }
+  .sections-panel .sec { width: 48px; height: 44px; min-height: 44px; font-size: 18px; border-radius: 9px; }
+  .sections-panel .sec.wide { height: 40px; min-height: 40px; font-size: 15px; flex: 1 1 40%; }   /* FILL and BREAK share the next line */
+  .sections-panel .sec-mains { gap: 6px; }
+  .sections-panel .sec-mains .sec { height: 48px; min-height: 48px; font-size: 22px; border-radius: 10px; }
+  .transport { gap: 8px; flex-wrap: nowrap; }
+  .transport .btn.big { width: 118px; height: 44px; min-height: 44px; font-size: 17px; border-radius: 10px; gap: 8px; }
+  .transport .check { height: 40px; font-size: 11px; gap: 6px; padding: 0; }
+  .transport .check input { width: 22px; height: 22px; }
+  .transport .btn.panic { height: 40px; padding: 0 10px; font-size: 13px; border-radius: 10px; }
+  .parts-bar { height: 40px; padding: 0 12px; font-size: 13px; gap: 10px; border-radius: 10px; }
+  .parts-bar-sum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .info-row:empty, .msgs:empty { display: none; }
+}
+label.btn { cursor: pointer; }
+
+/* START / STOP acknowledges a press: a quick squeeze and a white glow that fades (app.js adds .took). */
+@keyframes took {
+  0% { transform: scale(.92); filter: brightness(1.4); box-shadow: 0 0 0 5px rgba(255, 255, 255, .6); }
+  100% { transform: scale(1); filter: none; box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+#start.took { animation: took .3s ease-out; }
+
+/* Narrow (FILL and BREAK on their own line): INTRO at the left of the box, ENDING at the right. */
+@media (max-width: 1000px) {
+  .sec-row > .sec-ending { margin-left: auto; }
+}
+
+/* Wide: a clear gap between the INTRO and ENDING buttons (they share a line with FILL / BREAK). */
+@media (min-width: 1001px) {
+  .sec-row > .sec-ending { margin-left: 40px; }
 }

@@ -51,7 +51,7 @@
     if (manifest) {
       manifest.styles.forEach((s) => { if (byName[s.file]) items.push({ entry: byName[s.file], meta: s }); });
     } else {
-      entries.filter((x) => /\.(sty|stl|sth)$/i.test(x.name)).forEach((x) => {
+      entries.filter((x) => /\.(sty|stl|sth|prs|bcs|sst)$/i.test(x.name)).forEach((x) => {
         const parts = x.name.split('/');
         items.push({ entry: x, meta: { fileName: parts[parts.length - 1], folder: parts.length > 1 ? parts[parts.length - 2] : '' } });
       });
@@ -68,14 +68,14 @@
         } else {
           out.added.push(r.entry);
           const hasSettings = meta.settings && Object.keys(meta.settings).length;
-          if (meta.favorite || hasSettings || meta.added) {
+          if (meta.favorite || meta.added) {
             await library.change(r.entry.id, (e) => {
               e.favorite = !!meta.favorite;
-              if (hasSettings) e.settings = JSON.parse(JSON.stringify(meta.settings));
               if (meta.added) e.added = meta.added;
             });
-            if (hasSettings) out.settings++;
           }
+          // Settings go through setSettings: they belong to the style's music hash (and its copies).
+          if (hasSettings) { await library.setSettings(r.entry.id, meta.settings); out.settings++; }
         }
       } catch (e) { out.failed.push({ name: meta.fileName || entry.name, error: e && e.message ? e.message : String(e) }); }
       if (onProgress) onProgress(k + 1, items.length);

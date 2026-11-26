@@ -1,7 +1,7 @@
 // ChannelMap: which output channel each style part plays on, and what is sent there. No DOM.
 //   new ChannelMap(saved)          saved: what toJSON() gave (settings for some parts), or nothing for the defaults
 //   get(partId) -> { channel (1-16, 0 = off), program (send bank/program changes), mute, velocity (added to every
-//                    note's velocity, -64..+64; the result stays 1-127) }
+//                    note's velocity, -80..+80; the result stays 1-127) }
 //   velocityOf(partId, v)          a note's velocity with the part's boost
 //   set(partId, changes)           channel(partId) -> 1-16 or 0 when off or muted
 //   voiceMessages(part)            the messages that set a part's sound on its channel (bank, program, volume, pan,
@@ -38,7 +38,7 @@
         channel: p.channel != null ? p.channel : (DEFAULTS[id] || 0),
         program: p.program != null ? !!p.program : true,
         mute: !!p.mute,
-        velocity: Math.max(-64, Math.min(64, Number(p.velocity) || 0)),
+        velocity: Math.max(-80, Math.min(80, Number(p.velocity) || 0)),
       };
     }
     velocityOf(id, v) { return Math.max(1, Math.min(127, Math.round(v + this.get(id).velocity))); }

@@ -9,7 +9,6 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const STORE = 'arranger-settings';
-  const KEYS_LOW = 36, KEYS_HIGH = 95;          // the keyboard strip: C2..B6
 
   // ---------- settings ----------
   function load() { try { return JSON.parse(localStorage.getItem(STORE) || '{}') || {}; } catch (e) { return {}; } }
@@ -21,13 +20,19 @@
     memory: saved.memory == null ? true : !!saved.memory,
     styleId: saved.styleId || null,              // the style last loaded from the library
     outPort: saved.outPort || {},                // { id, name } of the output, or { none: true }
+    outMode: saved.outMode === 'synth' ? 'synth' : 'midi', // OUTPUT › SOUND: a MIDI port, or the built-in SoundFont synth
     clockPort: saved.clockPort || { none: true }, // where MIDI clock goes; none by default
     rhChannel: saved.rhChannel || 0,             // right hand (keys from the split up) to this channel; 0 = off
-    channelMap: saved.channelMap || {},          // ChannelMap.toJSON(): part -> { channel, program, mute }
+    // The default PARTS setup is the built-in one (ChannelMap defaults). Older versions saved PARTS changes here for
+    // every style (a part muted once stayed muted everywhere); that saved setup is dropped. A style's own changes are
+    // in its settings (parts), kept by its music hash.
+    channelMap: {},
     autoFill: saved.autoFill == null ? true : !!saved.autoFill,
     chordStart: !!saved.chordStart,              // a chord played while stopped starts the style
-    controls: saved.controls || {},
-    collapsed: saved.collapsed || {},            // style list: folder name -> collapsed              // Controls.toJSON(): action -> { port, channel, type, number, latch }
+    controls: saved.controls || {},              // Controls.toJSON(): action -> { port, channel, type, number }
+    collapsed: saved.collapsed || {},            // style list: folder name -> collapsed
+    partsOpen: !!saved.partsOpen,                // the PARTS table shown (the bar opens / closes it)
+    showFolders: saved.showFolders == null ? true : !!saved.showFolders,   // LAYOUT › SHOW FOLDERS: the list grouped by folder
   };
   function save() {
     try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* private mode, full storage */ }
@@ -43,66 +48,33 @@
       sync.armed = false;
       startStop();
     },
-    onKeys: renderKeys,
   });
   const sync = { armed: false };
-  let upperHeld = {};
   const keyboard = new A.KeyboardInput({
     channel: state.channel, split: state.split,
     lower: detector,
     upper: (d) => {
       const t = d[0] & 0xF0;
-      if (t === 0x90 && d[2] > 0) upperHeld[d[1]] = true;
-      else if (t === 0x80 || t === 0x90) delete upperHeld[d[1]];
-      // The right hand plays through on its own channel.
+      // The right hand plays through on its own channel, straight away: nothing is drawn for it.
       if (state.rhChannel && midi.output) {
         try { midi.output.send([t | (state.rhChannel - 1)].concat(Array.from(d).slice(1))); } catch (e) { /* port gone */ }
       }
-      renderKeys();
     },
     onSplit: (note) => {
       state.split = note; save();
       $('kb-split').value = String(note);
       $('kb-learn').setAttribute('aria-pressed', 'false');
-      renderKeys();
     },
   });
 
+  // The chord name, shrunk to fit its box when it's long (Bbm7b5/Ab): from the full size down in 4 px steps, 28 px at
+  // the least.
   function renderChord(c) {
-    $('chord').textContent = c ? N.chordName(c) : '–';
-  }
-
-  // The keyboard strip: white keys first, black keys on top; held keys lit, the split as a red line.
-  const IS_BLACK = [false, true, false, true, false, false, true, false, true, false, true, false];
-  const WHITE_W = 14, BLACK_W = 8, H = 70, BLACK_H = 44;
-  function keyLayout() {
-    const keys = [];
-    let x = 0;
-    for (let n = KEYS_LOW; n <= KEYS_HIGH; n++) {
-      if (IS_BLACK[n % 12]) keys.push({ n, black: true, x: x - BLACK_W / 2 });
-      else { keys.push({ n, black: false, x }); x += WHITE_W; }
-    }
-    return { keys, width: x };
-  }
-  const LAYOUT = keyLayout();
-  function renderKeys() {
-    const held = {};
-    detector.held().forEach((n) => { held[n] = true; });
-    Object.keys(upperHeld).forEach((n) => { held[n] = true; });
-    const rect = (k) => {
-      const cls = (k.black ? 'b' : 'w') + (held[k.n] ? ' held' : '') + (k.n >= keyboard.split ? ' right' : '');
-      return `<rect class="${cls}" x="${k.x}" y="0" width="${k.black ? BLACK_W : WHITE_W}" height="${k.black ? BLACK_H : H}"/>`;
-    };
-    const whites = LAYOUT.keys.filter((k) => !k.black), blacks = LAYOUT.keys.filter((k) => k.black);
-    const labels = whites.filter((k) => k.n % 12 === 0)
-      .map((k) => `<text class="label" x="${k.x + 3}" y="${H - 4}">${N.noteName(k.n)}</text>`);
-    let split = '';
-    const sk = LAYOUT.keys.find((k) => k.n === keyboard.split);
-    if (sk) split = `<line class="split" x1="${sk.x}" y1="-2" x2="${sk.x}" y2="${H + 2}"/>`;
-    const svg = $('keys');
-    svg.setAttribute('viewBox', `0 0 ${LAYOUT.width} ${H}`);
-    svg.innerHTML = whites.map(rect).join('') + blacks.map(rect).join('') + labels.join('') + split;
-    $('split-label').textContent = `Split ${N.noteName(keyboard.split)}: chords below, right hand from ${N.noteName(keyboard.split)} up.`;
+    const el = $('chord');
+    el.textContent = c ? N.chordName(c) : '–';
+    el.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(el).fontSize) || 92;
+    while (el.scrollWidth > el.clientWidth + 1 && size > 28) { size -= 4; el.style.fontSize = size + 'px'; }
   }
 
   // ---------- MIDI ----------
@@ -111,16 +83,13 @@
   function setConn(text, cls) { const el = $('conn-status'); el.textContent = text; el.className = 'status ' + cls; }
   function setStatus(text) { $('status-text').textContent = text || ''; }
 
-  // A port menu: (none) plus each port; ports with the same name get a number so they can be told apart.
+  // A port menu: (none) plus each port, kept apart by id; ports sharing a name are numbered ("Bluetooth 1", "Bluetooth 2").
+  // Port menus give each port its place in the list as the value (not its id: some browsers have no usable ids).
   function fillPortMenu(sel, ports, current) {
-    const count = {};
-    sel.innerHTML = '<option value="">(none)</option>' + ports.map((p) => {
-      count[p.name] = (count[p.name] || 0) + 1;
-      const label = count[p.name] > 1 ? `${p.name} (${count[p.name]})` : p.name;
-      return `<option value="${esc(p.id)}">${esc(label)}</option>`;
-    }).join('');
-    sel.value = current ? current.id : '';
+    sel.innerHTML = '<option value="">(none)</option>' + ports.map((p, k) => `<option value="${k}">${esc(A.MidiPorts.label(ports, p))}</option>`).join('');
+    sel.value = current && ports.indexOf(current) >= 0 ? String(ports.indexOf(current)) : '';
   }
+  const chosen = (ports, value) => (value === '' ? null : ports[Number(value)] || null);
 
   function connect() {
     if (!midi.access) return;
@@ -133,15 +102,8 @@
     hub.routeAll('controls', (data, port) => controls.handle(data, port), 10);
     renderControls();
     fillPortMenu($('kb-port'), ins, input);
+    pickOutput();
     const outs = A.MidiPorts.list(midi.access.outputs);
-    const output = A.MidiPorts.pick(outs, state.outPort);
-    if (output !== midi.output) {
-      if (player.playing) player.stop();
-      if (midi.output) panic(midi.output);         // leave nothing sounding on the old output
-      if (output) panic(output);                   // nor anything a previous page left on the new one
-    }
-    midi.output = output;
-    fillPortMenu($('out-port'), outs, output);
     const clockOut = A.MidiPorts.pick(outs, state.clockPort);
     if (clockOut !== midi.clock && midi.clock && player.playing) { try { midi.clock.send([0xFC]); } catch (e) { /* port gone */ } }
     midi.clock = clockOut;
@@ -152,7 +114,25 @@
     setStatus(input ? input.name : '');
   }
 
+  // The output the player sends to: the built-in synth (OUTPUT › SOUND: SOUNDFONT) or the chosen MIDI port.
+  function pickOutput() {
+    const outs = midi.access ? A.MidiPorts.list(midi.access.outputs) : [];
+    const port = A.MidiPorts.pick(outs, state.outPort);
+    const output = state.outMode === 'synth' ? synth : port;
+    if (output !== midi.output) {
+      if (player.playing) player.stop();           // changing the output stops the song
+      if (midi.output) panic(midi.output);         // leave nothing sounding on the old output
+      if (output) panic(output);                   // nor anything a previous page left on the new one
+      if (midi.output === synth) synth.park();     // the built-in synth goes quiet and stops using CPU
+      if (output === synth) synth.unpark();
+    }
+    midi.output = output;
+    fillPortMenu($('out-port'), outs, port);
+    renderSynth();
+  }
+
   async function start() {
+    pickOutput();                                  // the built-in synth works without Web MIDI
     if (!navigator.requestMIDIAccess) {
       setConn('No Web MIDI', 'off');
       setStatus('Use Chrome, or the MIDI Charmer plugin on iPad.');
@@ -167,17 +147,142 @@
     midi.access.onstatechange = connect;
     connect();
   }
+  // The refresh button in the settings: asks the browser for MIDI access again (some, like the iOS Web MIDI Browser
+  // app, only list devices connected since then that way) and rebuilds every port menu. The choices stay.
+  async function refreshMidi() {
+    const b = $('midi-refresh');
+    b.classList.add('spin');
+    if (navigator.requestMIDIAccess) {
+      try {
+        const fresh = await navigator.requestMIDIAccess();
+        if (midi.access && midi.access !== fresh) midi.access.onstatechange = null;
+        midi.access = fresh;
+        midi.access.onstatechange = connect;
+      } catch (e) { /* keep the access we had */ }
+    }
+    if (midi.access) connect();
+    renderControls();
+    const n = (m) => (midi.access ? A.MidiPorts.list(m).length : 0);
+    setStatus(midi.access ? `MIDI ports: ${n(midi.access.inputs)} in, ${n(midi.access.outputs)} out.` : 'No Web MIDI here.');
+    setTimeout(() => b.classList.remove('spin'), 400);
+  }
+  $('midi-refresh').addEventListener('click', refreshMidi);
+
+  // ---------- built-in synth ----------
+  // OUTPUT › SOUND: SOUNDFONT plays the style here, through FluidSynth (WebAssembly) and a .sf2 bank. The bank
+  // file is kept in IndexedDB (as the File itself, so a big bank isn't copied into memory to store it) and loads
+  // again with the page. The synth has send(data, time) like a MIDI output, so the player, the right hand and PANIC
+  // use it as one.
+  const synth = new A.SoundFontSynth({ clock: () => performance.now(), onChange: () => { renderSynth(); if (synth.status === 'stalled') rebuildSynth(); } });
+  const bankStore = (() => {
+    const open = () => new Promise((resolve, reject) => {
+      if (!window.indexedDB) { reject(new Error('No IndexedDB')); return; }
+      const r = indexedDB.open('arranger-soundfont', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('bank');
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+    const run = (mode, fn) => open().then((db) => new Promise((resolve, reject) => {
+      const t = db.transaction('bank', mode), req = fn(t.objectStore('bank'));
+      t.oncomplete = () => { db.close(); resolve(req.result); };
+      t.onerror = t.onabort = () => { db.close(); reject(t.error); };
+    }));
+    return {
+      get: () => run('readonly', (st) => st.get('current')).catch(() => null),
+      put: (name, file) => run('readwrite', (st) => st.put({ name, file }, 'current')),
+    };
+  })();
+  const sfView = { msg: '', warn: false, loading: false, tapShown: false };
+  function sfMsg(text, warn) { sfView.msg = text; sfView.warn = !!warn; renderSynth(); }
+  function renderSynth() {
+    const on = state.outMode === 'synth';
+    $('out-mode').value = state.outMode;
+    $('out-port-field').hidden = on;
+    $('sf-field').hidden = !on;
+    $('rh-note').hidden = !on;
+    $('sf-mem-note').hidden = !on;                 // a bank costs about its file size in memory                     // the right hand through the built-in synth is a little late
+    $('sf-name').textContent = sfView.loading ? 'Loading…' : (synth.bankName || 'No bank');
+    let text = sfView.msg, warn = sfView.warn;
+    if (synth.status === 'error') { text = `The synth didn't start: ${synth.error}`; warn = true; } else if (synth.status === 'starting') text = 'Starting the synth…';
+    else if (!synth.bankName && !sfView.loading && !warn) text = 'Choose a General MIDI bank (.sf2).';
+    const needTap = on && !!synth.bankName && (synth.suspended() || synth.status === 'stalled');
+    if (needTap) { text = 'Tap anywhere on the page to start the sound.'; warn = true; }
+    // The same in the header, where it's seen while playing (the settings are usually closed).
+    if (needTap !== sfView.tapShown) { sfView.tapShown = needTap; setStatus(needTap ? 'Tap the page to start the sound' : (midi.input ? midi.input.name : '')); }
+    $('sf-status').hidden = !on || !text;
+    $('sf-status').textContent = text;
+    $('sf-status').classList.toggle('warn', warn);
+  }
+  async function loadBank(file, keep) {
+    if (/\.(sf3|dls)$/i.test(file.name)) { sfMsg(`${file.name}: only .sf2 banks work here. Convert it to .sf2 with Polyphone (free, polyphone.io).`, true); return; }
+    sfView.loading = true; sfMsg(`Loading ${file.name}…`);
+    try {
+      // Not kept in a variable: the synth hands the bytes on (transferred, not copied) and nothing else holds them.
+      const r = await synth.load(await file.arrayBuffer(), file.name);
+      sfView.loading = false;
+      sfMsg(`${r.presets} sounds.`);
+      if (keep) bankStore.put(file.name, file).catch(() => sfMsg(`${r.presets} sounds. It couldn't be kept on this device: choose it again next time.`, true));
+    } catch (e) {
+      sfView.loading = false;
+      const why = e && e.message ? e.message : String(e);
+      sfMsg(`Could not load ${file.name}${why && why !== 'Error' ? ` (${why})` : ''}. Use a .sf2 bank (convert .sf3 / .dls with Polyphone); very large banks may not fit in memory.`, true);
+    }
+  }
+  // The audio stopped rendering (the watchdog in SoundFontSynth): a new synth, and the saved bank again.
+  let rebuilding = false;
+  async function rebuildSynth() {
+    if (rebuilding) return;
+    rebuilding = true;
+    if (player.playing && midi.output === synth) player.stop();
+    await synth.restart();
+    synthBooted = false;
+    if (state.outMode === 'synth') { await bootSynth(); sfMsg('The sound had stopped: the synth was started again.', true); }
+    rebuilding = false;
+  }
+  let synthBooted = false;
+  async function bootSynth() {
+    if (synthBooted) return;
+    synthBooted = true;
+    try { await synth.start(); } catch (e) { synthBooted = false; return; }
+    if (synth.bankName) return;
+    const rec = await bankStore.get();
+    if (rec && rec.file && !synth.bankName) await loadBank(rec.file, false);
+  }
+  // Browsers start audio only from a tap or a key press.
+  // wake() also replaces audio that iOS interrupted (the app was in the background, another audio app played).
+  ['pointerdown', 'touchend', 'keydown', 'click'].forEach((t) => document.addEventListener(t, () => synth.wake(), true));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') synth.visible(); });
+  $('out-mode').addEventListener('change', (ev) => {
+    state.outMode = ev.target.value === 'synth' ? 'synth' : 'midi';
+    save();
+    if (state.outMode === 'synth') { synth.resume(); bootSynth(); }
+    pickOutput();
+  });
+  $('sf-file').addEventListener('change', async (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    ev.target.value = '';
+    if (!file) return;
+    synth.resume();
+    await loadBank(file, true);
+  });
 
   // ---------- player ----------
   // Sends with a timestamp: the player schedules ~100 ms ahead. Without an output it still runs (the display moves).
-  const channelMap = new A.ChannelMap(state.channelMap);
+  // The PARTS setup of the loaded style: the defaults, with the style's own changes (settings.parts) on top.
+  const styleMapFor = (set) => {
+    const merged = JSON.parse(JSON.stringify(state.channelMap));
+    const own = (set && set.parts) || {};
+    Object.keys(own).forEach((pid) => { merged[pid] = Object.assign({}, merged[pid] || {}, own[pid]); });
+    return new A.ChannelMap(merged);
+  };
+  let channelMap = styleMapFor(null);
   const player = new A.StylePlayer({
     clock: () => performance.now(),
     timer: { every: (fn, ms) => setInterval(fn, ms), cancel: (h) => clearInterval(h) },
     send: (data, time) => { if (midi.output) { try { midi.output.send(data, time); } catch (e) { /* port gone */ } } },
     onChange: () => renderTransport(),
   });
-  // PANIC: on every channel, sustain off, all sound off and all notes off. Also sent when the page connects to an
+  // PANIC: on every channel, sustain off, all sound off, all notes off and reset all controllers. Also sent when the page connects to an
   // output, which ends notes left hanging by a page reloaded mid-song.
   // Not sent while the page unloads, and no MIDIOutput.clear(): Chrome 150 on macOS 12 crashed in its MIDI service
   // (2026-11-24) when both were in place; one of them is the likely cause, not confirmed which.
@@ -185,11 +290,21 @@
     const o = out || midi.output;
     if (!o) return;
     try {
-      for (let c = 0; c < 16; c++) { o.send([0xB0 | c, 64, 0]); o.send([0xB0 | c, 120, 0]); o.send([0xB0 | c, 123, 0]); }
+      // Also reset all controllers (121): pitch bend, mod wheel, expression; a bend left by a cut-off pattern goes too.
+      for (let c = 0; c < 16; c++) { o.send([0xB0 | c, 64, 0]); o.send([0xB0 | c, 120, 0]); o.send([0xB0 | c, 123, 0]); o.send([0xB0 | c, 121, 0]); }
     } catch (e) { /* port gone */ }
   }
+  // A short flash on START / STOP when it acts (tap, space bar or a foot switch): it "took".
+  function flashStart() {
+    const b = $('start');
+    b.classList.remove('took');
+    void b.offsetWidth;                            // restart the animation if it's still running
+    b.classList.add('took');
+  }
+  $('start').addEventListener('animationend', () => $('start').classList.remove('took'));
   function startStop() {
     if (!current) return;
+    flashStart();
     if (player.playing) player.stop(); else { player.setChord(detector.chord); player.start(); }
     renderTransport();
   }
@@ -209,25 +324,24 @@
     renderMemory();
   }
   function renderMemory() {
-    [['chord-memory', state.memory], ['chord-start', state.chordStart]].forEach(([id, on]) => {
-      const b = $(id);
-      b.textContent = on ? 'ON' : 'OFF';
-      b.setAttribute('aria-pressed', String(on));
-    });
+    $('chord-memory').checked = state.memory;
+    $('chord-start').checked = state.chordStart;
+    $('show-folders').checked = state.showFolders;
   }
+  // The settings open as a window over the whole page; ✕, Escape or a tap on the dark background closes it.
   function showSettings(on) {
-    $('pane-settings').hidden = !on;
-    $('pane-styles').hidden = on;
-    document.querySelector('.side').classList.toggle('settings-open', on);
+    $('settings-modal').hidden = !on;
     $('side-gear').setAttribute('aria-pressed', String(on));
   }
 
-  $('side-gear').addEventListener('click', () => showSettings($('pane-settings').hidden));
+  $('side-gear').addEventListener('click', () => showSettings($('settings-modal').hidden));
   $('settings-close').addEventListener('click', () => showSettings(false));
+  $('settings-modal').addEventListener('click', (ev) => { if (ev.target === $('settings-modal')) showSettings(false); });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !$('settings-modal').hidden) showSettings(false); });
   $('kb-port').addEventListener('change', (ev) => {
     const ins = midi.access ? A.MidiPorts.list(midi.access.inputs) : [];
-    const p = ins.find((x) => x.id === ev.target.value);
-    state.kbPort = p ? { id: p.id, name: p.name } : { none: true };
+    const p = chosen(ins, ev.target.value);
+    state.kbPort = p ? A.MidiPorts.ref(ins, p) : { none: true };
     save(); connect();
   });
   $('kb-channel').addEventListener('change', (ev) => {
@@ -236,7 +350,7 @@
   });
   $('kb-split').addEventListener('change', (ev) => {
     state.split = Number(ev.target.value); keyboard.split = state.split;
-    save(); renderKeys();
+    save();
   });
   $('kb-learn').addEventListener('click', () => {
     if (keyboard.learning) { keyboard.cancelLearn(); $('kb-learn').setAttribute('aria-pressed', 'false'); return; }
@@ -245,21 +359,22 @@
   });
   $('out-port').addEventListener('change', (ev) => {
     const outs = midi.access ? A.MidiPorts.list(midi.access.outputs) : [];
-    const p = outs.find((x) => x.id === ev.target.value);
-    state.outPort = p ? { id: p.id, name: p.name } : { none: true };
+    const p = chosen(outs, ev.target.value);
+    state.outPort = p ? A.MidiPorts.ref(outs, p) : { none: true };
     save(); connect();
   });
   $('clock-port').addEventListener('change', (ev) => {
     const outs = midi.access ? A.MidiPorts.list(midi.access.outputs) : [];
-    const p = outs.find((x) => x.id === ev.target.value);
-    state.clockPort = p ? { id: p.id, name: p.name } : { none: true };
+    const p = chosen(outs, ev.target.value);
+    state.clockPort = p ? A.MidiPorts.ref(outs, p) : { none: true };
     save(); connect();
   });
   $('rh-channel').addEventListener('change', (ev) => { state.rhChannel = Number(ev.target.value); save(); });
-  $('chord-start').addEventListener('click', () => { state.chordStart = !state.chordStart; save(); renderMemory(); });
-  $('chord-memory').addEventListener('click', () => {
-    state.memory = !state.memory; detector.setMemory(state.memory);
-    save(); renderMemory();
+  $('chord-start').addEventListener('change', (ev) => { state.chordStart = ev.target.checked; save(); });
+  $('show-folders').addEventListener('change', (ev) => { state.showFolders = ev.target.checked; save(); renderLibrary(); showCurrentRow(); });
+  $('chord-memory').addEventListener('change', (ev) => {
+    state.memory = ev.target.checked; detector.setMemory(state.memory);
+    save();
   });
 
   // ---------- style library ----------
@@ -283,26 +398,34 @@
     $('lib-funnel').setAttribute('aria-pressed', String(!!view.meter));     // yellow while it filters
     $('lib-fav').setAttribute('aria-pressed', String(view.favorites));
     const rows = library.list({ search: view.search, favorites: view.favorites, meter: view.meter });
+    const rowHtml = (e) => {
+      const on = current && current.entry.id === e.id ? ' on' : '';
+      const sub = [e.meter, e.tempo + ' bpm', e.source === 'sty' ? 'Yamaha' : 'Roland'].join(' · ');
+      return `<div class="row${on}" data-id="${esc(e.id)}">` +
+        `<div class="row-main"><div class="row-name">${esc(e.name)}</div><div class="row-sub">${esc(sub)}</div></div></div>`;
+    };
+    const empty = `<div class="empty">${library.size ? 'No styles match.' : 'No styles yet. + adds style files; the folder button adds every style in a folder.'}</div>`;
+    $('lib-count').textContent = library.size ? `${rows.length} of ${library.size} styles` : '';
+    renderStorage();
+    // LAYOUT › SHOW FOLDERS off: one list, A to Z, no folder headers.
+    if (!state.showFolders) {
+      const sorted = rows.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
+      $('lib-list').innerHTML = sorted.map(rowHtml).join('') || empty;
+      return;
+    }
     // Grouped by folder, each under a sticky header that collapses it (saved). While searching, every match shows.
     const groups = {};
     rows.forEach((e) => { (groups[e.folder || ''] = groups[e.folder || ''] || []).push(e); });
     const folders = Object.keys(groups).sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, undefined, { sensitivity: 'base' }));
     const searching = !!view.search.trim();
     $('lib-list').innerHTML = folders.map((folder) => {
-      const closed = !searching && !!state.collapsed[folder];
+      const closed = !searching && !!state.collapsed[folder] && folder !== view.openFolder;
       const head = `<div class="folder${closed ? ' closed' : ''}" data-folder="${esc(folder)}" role="button" aria-expanded="${!closed}">` +
         `<span class="folder-arrow">${closed ? '▸' : '▾'}</span><span class="folder-name">${esc(folder || 'Other')}</span>` +
         `<span class="folder-count">${groups[folder].length}</span></div>`;
       if (closed) return head;
-      return head + groups[folder].map((e) => {
-        const on = current && current.entry.id === e.id ? ' on' : '';
-        const sub = [e.meter, e.tempo + ' bpm', e.source === 'sty' ? 'Yamaha' : 'Roland'].join(' · ');
-        return `<div class="row${on}" data-id="${esc(e.id)}">` +
-          `<div class="row-main"><div class="row-name">${esc(e.name)}</div><div class="row-sub">${esc(sub)}</div></div></div>`;
-      }).join('');
-    }).join('') || `<div class="empty">${library.size ? 'No styles match.' : 'No styles yet. + adds style files; the folder button adds every style in a folder.'}</div>`;
-    $('lib-count').textContent = library.size ? `${rows.length} of ${library.size} styles` : '';
-    renderStorage();
+      return head + groups[folder].map(rowHtml).join('');
+    }).join('') || empty;
   }
 
   // The loaded style: name, summary, the section buttons, the parts with their channels.
@@ -313,9 +436,50 @@
     { title: 'BREAK', kind: 'break' },
     { title: 'ENDING', kind: 'ending', letters: ['A', 'B', 'C'] },
   ];
-  // The VEL menu: -40..+40 in steps of 5, added to every note of the part.
-  const VEL_OPTIONS = Array.from({ length: 17 }, (_, k) => (k - 8) * 5).map((v) => `<option value="${v}">${v > 0 ? '+' + v : v === 0 ? 'VEL 0' : v}</option>`).join('');
+  // The VEL ADJUST menu: -80..+80 in steps of 5, added to every note of the part.
+  const VEL_OPTIONS = Array.from({ length: 33 }, (_, k) => (k - 16) * 5).map((v) => `<option value="${v}">${v > 0 ? '+' + v : v}</option>`).join('');
   const CHANNEL_OPTIONS = '<option value="0">OFF</option>' + Array.from({ length: 16 }, (_, k) => `<option value="${k + 1}">${k + 1}</option>`).join('');
+  // What a part plays, by GM name: the style's voice for it, else the first program change it has anywhere (some
+  // Roland parts set theirs later in a section). Drums show a kit name. With the program number, as on a GM synth.
+  function programOf(part, style) {
+    let prog = part.voice && part.voice.program;
+    if (prog == null) {
+      style.order.some((id) => {
+        const t = style.sections[id].tracks[part.id];
+        const e = t && t.patterns[0].events.find((x) => x.type === 'program');
+        if (e) prog = e.program;
+        return prog != null;
+      });
+    }
+    return prog;
+  }
+  // Guitar parts (GM programs 25-32) skip their notes below C1: Roland styles put strum / fret noise keys down there
+  // (10% of the E-80 guitar notes), which a GM guitar plays as very low notes. A part is a guitar part when any of its
+  // sounds is a guitar: Survive Disco's Acc 4 is brass in Intro A but a guitar in the mains, fills and endings, where
+  // it plays the noise keys 1-8 (2026-11-25: heard as a strange sound the mixer seemed not to reach).
+  function noteFloors(style) {
+    const out = {};
+    style.parts.forEach((p) => {
+      if (p.role === 'drums') return;
+      const progs = [];
+      if (p.voice && p.voice.program != null) progs.push(p.voice.program);
+      style.order.forEach((id) => {
+        const t = style.sections[id].tracks[p.id];
+        if (t) t.patterns.forEach((pat) => pat.events.forEach((e) => { if (e.type === 'program') progs.push(e.program); }));
+      });
+      if (progs.some((g) => g >= 24 && g <= 31)) out[p.id] = 24;
+    });
+    return out;
+  }
+  function soundName(part, style) {
+    const prog = programOf(part, style);
+    if (prog == null) return '';
+    if (part.role === 'drums') {
+      // A kit a GM synth doesn't have is sent as the Standard Kit (ChannelMap): say so.
+      return A.ChannelMap.GM_KITS.indexOf(prog) >= 0 ? `${A.GmNames.kit(prog)} · ${prog + 1}` : `Standard Kit (the style asks for kit ${prog + 1})`;
+    }
+    return `${A.GmNames.program(prog)} · ${prog + 1}`;
+  }
   function renderStyle() {
     renderDelete();
     renderFavorite();
@@ -329,45 +493,71 @@
     const s = current.style;
     $('style-name').textContent = s.name;
     $('style-sum').textContent = `${A.Style.summary(s)} · ${s.source === 'sty' ? 'Yamaha' : 'Roland'} ${s.format}`;
-    $('style-sections').innerHTML = SECTION_GROUPS.map((g) => {
-      let btns;
+    // Section buttons: INTRO and ENDING letters, FILL and BREAK on the first row; the four MAINs, wide, below.
+    const buttonsOf = (g) => {
       if (g.letters) {
-        btns = g.letters.map((l) => {
+        return g.letters.map((l) => {
           const id = g.kind + l, sec = s.sections[id];
           return `<button class="btn sec" type="button" data-kind="${g.kind}" data-letter="${l}" data-id="${id}"${sec ? '' : ' disabled'} title="${sec ? sec.bars + ' bar' + (sec.bars === 1 ? '' : 's') : 'not in this style'}">${l}</button>`;
-        });
-      } else {
-        const ids = s.order.filter((id) => s.sections[id].kind === g.kind);
-        btns = [`<button class="btn sec" type="button" data-kind="${g.kind}"${ids.length ? '' : ' disabled'} title="${ids.length ? esc(ids.map((id) => s.sections[id].name).join(', ')) : 'not in this style'}">${g.title}</button>`];
+        }).join('');
       }
-      return `<div class="sec-group"><div class="sec-title">${g.kind === 'fill' || g.kind === 'break' ? '&nbsp;' : g.title}</div><div class="sec-btns${g.letters ? ' pill' : ''}">${btns.join('')}</div></div>`;
-    }).join('');
-    $('style-parts').innerHTML = s.parts.map((p) => {
+      const ids = s.order.filter((id) => s.sections[id].kind === g.kind);
+      return `<button class="btn sec wide" type="button" data-kind="${g.kind}"${ids.length ? '' : ' disabled'} title="${ids.length ? esc(ids.map((id) => s.sections[id].name).join(', ')) : 'not in this style'}">${g.title}</button>`;
+    };
+    const group = (kind) => SECTION_GROUPS.find((g) => g.kind === kind);
+    const labelled = (kind) => `<div class="sec-group sec-${kind}"><div class="sec-title">${group(kind).title}</div><div class="sec-btns">${buttonsOf(group(kind))}</div></div>`;
+    $('style-sections').innerHTML =
+      `<div class="sec-row">${labelled('intro')}${labelled('ending')}<div class="sec-spacer"></div>${buttonsOf(group('fill'))}${buttonsOf(group('break'))}</div>` +
+      `<div class="sec-group"><div class="sec-title">MAIN</div><div class="sec-mains">${buttonsOf(group('main'))}</div></div>`;
+    // A table: a header row, then one row per part, in the same grid columns.
+    $('style-parts').innerHTML = '<div class="part-row part-head"><span>PART</span><span>CHANNEL</span><span>PRG CHANGE</span>' +
+      '<span>MUTE</span><span>VEL ADJUST</span><span class="parts-sound-head">SOUND</span></div>' + s.parts.map((p) => {
       const v = p.voice, m = channelMap.get(p.id);
-      const voice = v.program != null ? `program ${v.program + 1}${v.msb ? ' (bank ' + v.msb + ')' : ''}` : '';
+      const voice = soundName(p, s);
       return `<div class="part-row" data-part="${esc(p.id)}"><span class="part-name">${esc(p.name)}</span>` +
         `<select data-ch title="Output channel">${CHANNEL_OPTIONS}</select>` +
-        `<button class="btn" type="button" data-prg aria-pressed="${m.program}" title="Send bank and program changes on this channel (off for a drum plugin)">PRG</button>` +
-        `<button class="btn" type="button" data-mute aria-pressed="${m.mute}" title="Mute">MUTE</button>` +
-        `<select data-vel title="Velocity boost: added to every note of this part (all styles)">${VEL_OPTIONS}</select>` +
+        `<label class="check" title="Send bank and program changes on this channel (off for a drum plugin)"><input type="checkbox" data-prg${m.program ? ' checked' : ''}></label>` +
+        `<label class="check" title="Mute this part"><input type="checkbox" data-mute${m.mute ? ' checked' : ''}></label>` +
+        `<select data-vel title="Added to every note's velocity on this part">${VEL_OPTIONS}</select>` +
         `<span class="part-voice">${esc(voice)}</span></div>`;
-    }).join('');
-    Array.from($('style-parts').querySelectorAll('.part-row')).forEach((row) => {
+    }).join('') +
+      // DEFAULTS under the last part: drops this style's own PARTS setup.
+      '<div class="parts-foot"><button id="parts-defaults" class="btn" type="button" title="Drop this style\'s own PARTS setup and use the defaults" disabled>DEFAULTS</button></div>';
+    Array.from($('style-parts').querySelectorAll('.part-row[data-part]')).forEach((row) => {      // not the header row
       row.querySelector('[data-ch]').value = String(channelMap.get(row.getAttribute('data-part')).channel);
       row.querySelector('[data-vel]').value = String(channelMap.get(row.getAttribute('data-part')).velocity);
     });
+    renderPartsHead();
+    renderPartsBar();
     renderTransport();
+  }
+  // PARTS is a bar that opens the table: "7 parts on channels 2-10 · none muted". Open or closed is remembered.
+  function renderPartsBar() {
+    const open = !!state.partsOpen && !!current;
+    $('style-parts').hidden = !open;
+    $('parts-toggle').setAttribute('aria-expanded', String(open));
+    $('parts-arrow').textContent = open ? 'PARTS ▾' : 'PARTS ▸';
+    if (!current) { $('parts-sum').textContent = 'Load a style to see its parts'; return; }
+    const parts = current.style.parts;
+    const chans = parts.map((p) => channelMap.channel(p.id)).filter(Boolean);
+    const muted = parts.filter((p) => channelMap.get(p.id).mute).length;
+    $('parts-sum').textContent = `${parts.length} part${parts.length === 1 ? '' : 's'}` +
+      (chans.length ? ` on channels ${Math.min.apply(null, chans)}–${Math.max.apply(null, chans)}` : '') +
+      ` · ${muted ? muted + ' muted' : 'none muted'}` + (open ? '' : ' · tap to open');
   }
 
   // Section buttons lit from the flow: the one playing, the one coming at the next bar line (blinking), where a
   // one-shot goes next, and while stopped the armed intro (blinking) and the selected main.
   function renderTransport() {
     const f = player.flow;
-    $('start').textContent = player.playing ? 'STOP' : 'START';
+    // A drawn triangle / square (not ▶ ■, which iOS can turn into emoji), then the word.
+    $('start').innerHTML = player.playing
+      ? '<svg class="start-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1.5" fill="currentColor"/></svg>STOP'
+      : '<svg class="start-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5v13l11.5-6.5z" fill="currentColor"/></svg>START';
     $('start').classList.toggle('on', player.playing);
     $('start').disabled = !current;
-    $('sync').setAttribute('aria-pressed', String(sync.armed));
-    $('autofill').setAttribute('aria-pressed', String(state.autoFill));
+    $('sync').checked = sync.armed;
+    $('autofill').checked = state.autoFill;
     $('tempo').textContent = String(Math.round(player.tempo));
     $('vol').textContent = Math.round(player.volume * 100) + '%';
     if (!f || !current) return;
@@ -377,9 +567,11 @@
       const kind = b.getAttribute('data-kind'), id = b.getAttribute('data-id');
       const match = (x) => x && (id ? x === id : A.SectionFlow.kindOf(x) === kind);
       b.classList.toggle('on', !!match(playingId));
-      b.classList.toggle('pending', player.playing ? !!match(f.pending) : (kind === 'intro' && match(f.armed)));
+      b.classList.toggle('pending', player.playing && !!match(f.pending));
       b.classList.toggle('next', player.playing && !!match(f.after) && !match(f.pending));
-      b.classList.toggle('sel', !player.playing && kind === 'main' && id === 'main' + f.main);
+      // Outlined: the main START leads to, the intro START plays, the ending STOP plays (that one while playing too).
+      b.classList.toggle('sel', !match(playingId) && !(player.playing && match(f.pending)) &&
+        ((!player.playing && kind === 'main' && id === 'main' + f.main) || (!player.playing && id === f.intro) || id === f.ending));
     });
   }
 
@@ -413,12 +605,15 @@
       const next = await library.load(id);
       current = next;
       const set = current.entry.settings;
+      channelMap = styleMapFor(set);
       if (player.playing) {
         // Playing: the new style takes over at the next bar line, in its Main A (no intro).
         player.changeStyle(current.style, channelMap, set.groups, set.tempo);
+        player.setNoteFloors(noteFloors(current.style));
         player.setVolume(set.volume != null ? set.volume : 1);
       } else {
         player.load(current.style, channelMap, set.groups);
+        player.setNoteFloors(noteFloors(current.style));
         player.flow.autoFill = state.autoFill;
         if (set.tempo) player.setTempo(set.tempo);
         player.setVolume(set.volume != null ? set.volume : 1);
@@ -433,12 +628,27 @@
     renderStyle(); renderLibrary();
   }
 
+  // A zip (a backup, or a pack of styles) by its first bytes, PK 3 4: iOS doesn't always keep the extension.
+  async function isZip(f) {
+    if (/\.zip$/i.test(f.name)) return true;
+    try {
+      const head = new Uint8Array(await (f.slice(0, 4).arrayBuffer ? f.slice(0, 4).arrayBuffer() : new Response(f.slice(0, 4)).arrayBuffer()));
+      return head[0] === 0x50 && head[1] === 0x4B && head[2] === 3 && head[3] === 4;
+    } catch (e) { return false; }
+  }
+
   // Files from the pickers: style files only for a folder (it may hold other things), anything for a pick (the
-  // content decides, and iOS doesn't always keep extensions).
+  // content decides, and iOS doesn't always keep extensions). A zip picked with + is restored, as RESTORE does.
   async function importFiles(fileList, fromFolder) {
     if (!library || view.importing) return;
-    const files = Array.from(fileList || []).filter((f) => !fromFolder || /\.(sty|stl|sth)$/i.test(f.name));
-    if (!files.length) { showMessages(fromFolder ? '<div class="warn">No .sty or .stl files in that folder.</div>' : ''); return; }
+    let files = Array.from(fileList || []).filter((f) => !fromFolder || /\.(sty|stl|sth|prs|bcs|sst)$/i.test(f.name));   // .prs / .bcs / .sst: Yamaha styles too
+    if (!fromFolder) {
+      const zips = [];
+      for (const f of files) if (await isZip(f)) zips.push(f);
+      for (const z of zips) await restoreZip(z);
+      if (zips.length) { files = files.filter((f) => zips.indexOf(f) < 0); if (!files.length) return; }
+    }
+    if (!files.length) { showMessages(fromFolder ? '<div class="warn">No style files (.sty, .prs, .bcs, .sst, .stl, .sth) in that folder.</div>' : ''); return; }
     view.importing = true;
     const items = files.map((f) => {
       const rel = f.webkitRelativePath || '';
@@ -454,6 +664,7 @@
     view.importing = false;
     setStatus(midi.input ? midi.input.name : '');
     const lines = [`<div>Added ${r.added.length} style${r.added.length === 1 ? '' : 's'}` +
+      (r.sameMusic.length ? ` (${r.sameMusic.length} with the same music as a style already there)` : '') +
       (r.duplicates.length ? `, ${r.duplicates.length} already in the library` : '') +
       (r.failed.length ? `, ${r.failed.length} skipped:` : '.') + '</div>'];
     r.failed.slice(0, 30).forEach((f) => lines.push(`<div class="warn">${esc(f.name)}: ${esc(f.error)}</div>`));
@@ -463,11 +674,18 @@
     if (!current && r.added.length === 1) loadStyle(r.added[0].id);
   }
 
-  $('lib-import').addEventListener('click', () => $('lib-files').click());
-  $('lib-folder').addEventListener('click', () => $('lib-dir').click());
-  $('lib-folder').hidden = !('webkitdirectory' in document.createElement('input')) || /iPad|iPhone/.test(navigator.userAgent);
+  // + and the folder button are labels for these inputs (see index.html). The folder input only exists where folders
+  // can be picked (desktop Chrome): it's made here, so iPad web views never get a webkitdirectory input at all.
   $('lib-files').addEventListener('change', (ev) => { importFiles(ev.target.files, false); ev.target.value = ''; });
-  $('lib-dir').addEventListener('change', (ev) => { importFiles(ev.target.files, true); ev.target.value = ''; });
+  const canPickFolders = 'webkitdirectory' in document.createElement('input') && !/iPad|iPhone|iPod/.test(navigator.userAgent) &&
+    !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);          // an iPad asking for the desktop site
+  if (canPickFolders) {
+    const dir = document.createElement('input');
+    dir.type = 'file'; dir.id = 'lib-dir'; dir.multiple = true; dir.webkitdirectory = true; dir.className = 'sr-only'; dir.tabIndex = -1;
+    $('lib-folder').after(dir);
+    dir.addEventListener('change', (ev) => { importFiles(ev.target.files, true); ev.target.value = ''; });
+    $('lib-folder').hidden = false;
+  }
   $('lib-search').addEventListener('input', (ev) => { view.search = ev.target.value; renderLibrary(); });
   $('lib-clear').addEventListener('click', () => { view.search = ''; $('lib-search').value = ''; renderLibrary(); });
   $('lib-fav').addEventListener('click', () => { view.favorites = !view.favorites; renderLibrary(); });
@@ -477,7 +695,9 @@
     if (head) {
       if (view.search.trim()) return;                 // searching shows every match; folders open again after
       const f = head.getAttribute('data-folder');
-      if (state.collapsed[f]) delete state.collapsed[f]; else state.collapsed[f] = true;
+      const shut = state.collapsed[f] && f !== view.openFolder;
+      if (f === view.openFolder) view.openFolder = null;
+      if (shut) delete state.collapsed[f]; else state.collapsed[f] = true;
       save(); renderLibrary();
       return;
     }
@@ -526,7 +746,7 @@
   });
 
   // ---------- transport and parts ----------
-  $('start').addEventListener('click', startStop);
+  $('start').addEventListener('click', startEnding);
   $('panic').addEventListener('click', () => {
     sync.armed = false;
     if (player.playing) player.stop();
@@ -535,9 +755,9 @@
     setStatus('All notes off.');
   });
 
-  $('sync').addEventListener('click', () => { sync.armed = !sync.armed && !player.playing; renderTransport(); });
-  $('autofill').addEventListener('click', () => {
-    state.autoFill = !state.autoFill; save();
+  $('sync').addEventListener('change', (ev) => { sync.armed = ev.target.checked && !player.playing; renderTransport(); });
+  $('autofill').addEventListener('change', (ev) => {
+    state.autoFill = ev.target.checked; save();
     if (player.flow) player.flow.autoFill = state.autoFill;
     renderTransport();
   });
@@ -581,49 +801,63 @@
   $('vol-down').addEventListener('click', () => changeVolume(player.volume - 0.1));
   $('vol-up').addEventListener('click', () => changeVolume(player.volume + 0.1));
   $('vol').addEventListener('click', () => changeVolume(1));
+  // PARTS changes belong to the loaded style (saved by its music hash, shared by its copies). DEFAULTS drops them.
+  function settingsOfCurrent() { return Object.assign({}, current && library.entries[current.entry.id] ? library.entries[current.entry.id].settings : {}); }
+  async function savePart(pid) {
+    if (!current) return;
+    const s = settingsOfCurrent();
+    s.parts = Object.assign({}, s.parts || {});
+    s.parts[pid] = channelMap.get(pid);
+    await library.setSettings(current.entry.id, s);
+    renderPartsHead();
+  }
+  // DEFAULTS, under the table: drops the loaded style's own PARTS setup; greyed out when it has none.
+  function renderPartsHead() {
+    const b = document.getElementById('parts-defaults');
+    if (b) b.disabled = !(current && settingsOfCurrent().parts);
+  }
+  $('style-parts').addEventListener('click', async (ev) => {
+    if (!ev.target.closest('#parts-defaults') || !current) return;
+    const s = settingsOfCurrent();
+    delete s.parts;
+    await library.setSettings(current.entry.id, s);
+    channelMap = styleMapFor(s); player.map = channelMap;
+    renderStyle();
+  });
+  $('parts-toggle').addEventListener('click', () => {
+    if (!current) return;
+    state.partsOpen = !state.partsOpen; save();
+    renderPartsBar();
+  });
   $('style-parts').addEventListener('change', (ev) => {
     const row = ev.target.closest('.part-row');
     if (!row) return;
-    if (ev.target.matches('[data-vel]')) {
-      channelMap.set(row.getAttribute('data-part'), { velocity: Number(ev.target.value) });
-      state.channelMap = channelMap.toJSON(); save();
-      return;
-    }
-    if (!ev.target.matches('[data-ch]')) return;
-    channelMap.set(row.getAttribute('data-part'), { channel: Number(ev.target.value) });
-    state.channelMap = channelMap.toJSON(); save();
-  });
-  $('style-parts').addEventListener('click', (ev) => {
-    const row = ev.target.closest('.part-row'), b = ev.target.closest('.btn');
-    if (!row || !b) return;
-    const id = row.getAttribute('data-part'), m = channelMap.get(id);
-    if (b.hasAttribute('data-prg')) channelMap.set(id, { program: !m.program });
-    if (b.hasAttribute('data-mute')) channelMap.set(id, { mute: !m.mute });
-    state.channelMap = channelMap.toJSON(); save();
-    b.setAttribute('aria-pressed', String(b.hasAttribute('data-prg') ? !m.program : !m.mute));
+    const pid = row.getAttribute('data-part');
+    if (ev.target.matches('[data-prg]')) channelMap.set(pid, { program: ev.target.checked });
+    else if (ev.target.matches('[data-mute]')) channelMap.set(pid, { mute: ev.target.checked });
+    else if (ev.target.matches('[data-vel]')) channelMap.set(pid, { velocity: Number(ev.target.value) });
+    else if (ev.target.matches('[data-ch]')) channelMap.set(pid, { channel: Number(ev.target.value) });
+    else return;
+    savePart(pid);
+    renderPartsBar();
   });
   // Space bar: start / stop (not while typing in the search box).
   document.addEventListener('keydown', (ev) => {
     if (ev.code !== 'Space' || /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName)) return;
+    if (!$('settings-modal').hidden) return;          // the space bar presses buttons in the settings, not START
     ev.preventDefault();
     startEnding();
   });
   // The space bar (and the Start / Ending control): start with Intro A; while playing, the first ending.
+  // The START / STOP button and the space bar: start with the selected intro (none selected: straight into the
+  // main); while playing, the selected ending, then stop. Pressed again during the ending, or with no ending
+  // selected: stop at once. (The Start / Stop control starts and stops at once.)
   function startEnding() {
     if (!current || !player.flow) return;
-    const f = player.flow;
-    if (!player.playing) {
-      // Starting from the space bar plays Intro A first, when the style has one and no other intro is armed.
-      if (!f.armed && current.style.sections.introA) player.press('intro', 'A');
-      startStop();
-      return;
-    }
-    // While playing: the first ending (A, else the nearest one the style has), then stop. Pressed again during
-    // the ending (or with no ending in the style): stop at once.
-    const ending = f.currentKind === 'ending' || A.SectionFlow.kindOf(f.pending) === 'ending';
-    const hasEnding = current.style.order.some((id) => current.style.sections[id].kind === 'ending');
-    if (ending || !hasEnding) startStop();
-    else { player.press('ending', 'A'); renderTransport(); }
+    flashStart();
+    if (!player.playing) { startStop(); return; }
+    if (player.flow.requestStop()) startStop();
+    else renderTransport();
   }
 
   // ---------- controls from other devices ----------
@@ -641,10 +875,22 @@
       setStatus(`${A.Controls.ACTIONS.find((a) => a.id === id).name}: ${A.Controls.describe(controls.get(id))}`);
     },
   });
+  // Next / previous main variation: the next (A -> B -> C -> D -> A) or previous (A -> D -> C -> B) main the style
+  // has, as if its button was pressed (with a fill when AUTO FILL is on; while stopped it selects it).
+  function stepMain(dir) {
+    const f = player.flow;
+    if (!f) return;
+    const mains = f.mains();
+    if (mains.length < 2) return;
+    player.press('main', mains[(mains.indexOf(f.main) + dir + mains.length) % mains.length]);
+    renderTransport();
+  }
   function doAction(id) {
     const m = /^(intro|main|ending)([A-D])$/.exec(id);
     if (m) { player.press(m[1], m[2]); renderTransport(); return; }
     if (id === 'fill' || id === 'break') { player.press(id, player.flow && player.flow.main); renderTransport(); return; }
+    if (id === 'nextMain') { stepMain(1); return; }
+    if (id === 'prevMain') { stepMain(-1); return; }
     if (id === 'startStop') startStop();
     else if (id === 'startEnding') startEnding();
     else if (id === 'syncStart') $('sync').click();
@@ -652,28 +898,36 @@
     else if (id === 'tapTempo') tap();
     else if (id === 'tempoDown') changeTempo(player.tempo - 1);
     else if (id === 'tempoUp') changeTempo(player.tempo + 1);
+    else if (id === 'soloPerc') {
+      // It latches: each press of its switch turns it on, the next one off.
+      player.setSoloPercussion(!player.soloPercussion);
+      setStatus(player.soloPercussion ? 'Solo percussion: only the drums play.' : 'Solo percussion off.');
+    }
   }
-  // The list in the settings: each action, what it's assigned to, the port it listens on, LEARN, LATCH and ✕.
+  // The list in the settings: each action, what it's assigned to, the port it listens on, LEARN and ✕.
   function renderControls() {
     const ins = midi.access ? A.MidiPorts.list(midi.access.inputs) : [];
+    const clash = controls.conflicts();             // the same switch on two actions: shown in red
     $('controls-list').innerHTML = A.Controls.ACTIONS.map((act) => {
       const a = controls.get(act.id), learning = controls.learning === act.id;
       let second = '';
       if (a) {
-        const known = !a.port || ins.some((p) => p.id === a.port.id || p.name === a.port.name);
-        const opts = '<option value="">ANY PORT</option>' + ins.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('') +
-          (a.port && !known ? `<option value="${esc(a.port.id || '')}">${esc(a.port.name)} (not connected)</option>` : '');
+        const known = !a.port || !!A.MidiPorts.find(ins, a.port);
+        const opts = '<option value="">ANY PORT</option>' + ins.map((p, k) => `<option value="${k}">${esc(A.MidiPorts.label(ins, p))}</option>`).join('') +
+          (a.port && !known ? `<option value="saved">${esc(a.port.name)} (not connected)</option>` : '');
         second = `<div class="ctl-line"><select data-port title="The port this control listens on">${opts}</select>` +
-          (a.type === 'cc' ? `<button class="btn" type="button" data-latch aria-pressed="${!!a.latch}" title="For pedals that send on and off on alternate presses">LATCH</button>` : '') + '</div>';
+'</div>';
       }
-      return `<div class="ctl-row${a ? ' set' : ''}" data-act="${act.id}"><div class="ctl-line"><span class="ctl-name">${esc(act.name)}</span>` +
+      return `<div class="ctl-row${a ? ' set' : ''}${clash[act.id] ? ' clash' : ''}" data-act="${act.id}"${clash[act.id] ? ' title="This switch is also assigned to another action: one press does both"' : ''}><div class="ctl-line"><span class="ctl-name">${esc(act.name)}</span>` +
         `<span class="ctl-what">${learning ? 'press a switch…' : esc(A.Controls.describe(a))}</span>` +
         `<button class="btn" type="button" data-learn aria-pressed="${learning}">LEARN</button>` +
         (a ? '<button class="btn" type="button" data-clear aria-label="Remove">✕</button>' : '') + `</div>${second}</div>`;
     }).join('');
     Array.from($('controls-list').querySelectorAll('.ctl-row')).forEach((row) => {
       const a = controls.get(row.getAttribute('data-act')), sel = row.querySelector('[data-port]');
-      if (a && sel) sel.value = a.port ? (ins.find((p) => p.id === a.port.id || p.name === a.port.name) || a.port).id || '' : '';
+      if (!a || !sel) return;
+      const p = a.port && A.MidiPorts.find(ins, a.port);
+      sel.value = !a.port ? '' : p ? String(ins.indexOf(p)) : 'saved';
     });
   }
   $('controls-list').addEventListener('click', (ev) => {
@@ -682,7 +936,6 @@
     const id = row.getAttribute('data-act');
     if (b.hasAttribute('data-learn')) { if (controls.learning === id) controls.cancelLearn(); else controls.learn(id); }
     else if (b.hasAttribute('data-clear')) controls.clear(id);
-    else if (b.hasAttribute('data-latch')) { const a = controls.get(id); a.latch = !a.latch; controls.assign(id, a); }
     state.controls = controls.toJSON(); save();
     renderControls();
   });
@@ -690,8 +943,10 @@
     const row = ev.target.closest('.ctl-row');
     if (!row || !ev.target.matches('[data-port]')) return;
     const id = row.getAttribute('data-act'), a = controls.get(id);
-    const p = A.MidiPorts.list(midi.access ? midi.access.inputs : []).find((x) => x.id === ev.target.value);
-    a.port = p ? { id: p.id, name: p.name } : null;
+    if (ev.target.value === 'saved') return;
+    const ins = A.MidiPorts.list(midi.access ? midi.access.inputs : []);
+    const p = chosen(ins, ev.target.value);
+    a.port = p ? A.MidiPorts.ref(ins, p) : null;
     controls.assign(id, a);
     state.controls = controls.toJSON(); save();
   });
@@ -744,11 +999,14 @@
   });
   $('lib-backup').addEventListener('click', () => saveZip(false));
   $('lib-backup-fav').addEventListener('click', () => saveZip(true));
-  $('lib-restore').addEventListener('click', () => $('lib-zip').click());
   $('lib-zip').addEventListener('change', async (ev) => {
     const f = ev.target.files && ev.target.files[0];
     ev.target.value = '';
-    if (!f || !library || view.importing) return;
+    if (f) await restoreZip(f);
+  });
+  // A backup zip (or any zip of styles) into the library: from RESTORE, or a zip picked with +.
+  async function restoreZip(f) {
+    if (!library || view.importing) return;
     view.importing = true;
     try {
       const bytes = new Uint8Array(await (f.arrayBuffer ? f.arrayBuffer() : new Response(f).arrayBuffer()));
@@ -762,7 +1020,8 @@
     view.importing = false;
     setStatus(midi.input ? midi.input.name : '');
     renderLibrary();
-  });
+    renderStorage();
+  }
 
   // STORAGE in the settings: where styles are kept, how many, and how much space their files take.
   function renderStorage() {
@@ -772,18 +1031,28 @@
     $('storage-status').textContent = STORAGE_NOTE[library.backend.kind] + amount;
   }
 
+  function showCurrentRow() {
+    const row = $('lib-list').querySelector('.row.on');
+    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center' });
+  }
+
   async function openLibrary() {
     library = await A.StyleLibrary.openBest(window);
     renderLibrary();
-    if (state.styleId && library.entries[state.styleId]) loadStyle(state.styleId);
+    if (state.styleId && library.entries[state.styleId]) {
+      // The style from before the reload: loaded, its folder opened (just for now) and its row scrolled into view.
+      view.openFolder = library.entries[state.styleId].folder || '';
+      await loadStyle(state.styleId);
+      showCurrentRow();
+    }
   }
 
   fillMenus();
   renderChord(null);
-  renderKeys();
   renderStyle();
   renderControls();
   openLibrary();
   start();
+  if (state.outMode === 'synth') bootSynth();
   requestAnimationFrame(renderCounter);
 }());

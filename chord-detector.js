@@ -2,8 +2,10 @@
 // split and the channel); it calls back when the chord changes.
 //   recognise(notes)   static, pure: MIDI note numbers -> { root, type, bass } or null when no chord fits.
 //                      Lowest note = bass. Root position wins over an inversion, a full chord over one with the 5th
-//                      left out, then the order of ChordNames.TYPES (Am7/E over C6/E). It takes 3 different notes:
-//                      one or two keys (or notes doubled in octaves) are no chord. Notes that only fit with the
+//                      left out, then the order of ChordNames.TYPES (Am7/E over C6/E). But a complete major or minor
+//                      triad in inversion wins over a chord with a note left out (F A D = Dm/F, not F6 without C). One note (or its octaves)
+//                      is no chord. Two notes: a major third above the lowest = major, a minor third = minor,
+//                      anything else no chord. Notes that only fit with the
 //                      bass left out make a slash chord (D + C E G = Cadd9/D).
 //   noteOn(n) / noteOff(n) / allOff()
 //   chord              the current chord (null until the first one)
@@ -27,7 +29,15 @@
     const bass = N.pc(lowest);
     const pcs = [];
     notes.forEach((n) => { if (pcs.indexOf(N.pc(n)) < 0) pcs.push(N.pc(n)); });
-    if (pcs.length < 3) return null;                      // a chord takes 3 different notes (octaves don't count)
+    // Two different notes: a major third above the lowest is that major chord, a minor third its minor chord
+    // (C + E = C, A + C = Am). Anything else with fewer than 3 different notes is no chord (octaves don't count).
+    if (pcs.length === 2) {
+      const up = N.pc(pcs.find((p) => p !== bass) - bass);
+      if (up === 4) return { root: bass, type: '', bass: null };
+      if (up === 3) return { root: bass, type: 'm', bass: null };
+      return null;
+    }
+    if (pcs.length < 3) return null;
     const best = bestMatch(pcs, bass);
     if (best) return best;
     // The bass may be a note outside the chord (C/D): read the chord without it, keep it as the bass.
@@ -47,7 +57,10 @@
         if (!rel.every((i) => t.iv.indexOf(i) >= 0)) return;            // a note the chord doesn't have
         const missing = t.iv.filter((i) => rel.indexOf(i) < 0);
         if (!missing.every((i) => t.opt.indexOf(i) >= 0)) return;       // a note the chord can't do without
-        const score = (bass != null && root !== bass ? 100 : 0) + missing.length * 40 + t.rank;
+        // An inversion costs more than a note left out, except for a complete major or minor triad: F A D is Dm/F,
+        // not F6 without its 5th (but C Eb A stays Cm6, D G C D7sus4).
+        const triad = (t.id === '' || t.id === 'm') && !missing.length;
+        const score = (bass != null && root !== bass ? (triad ? 30 : 100) : 0) + missing.length * 40 + t.rank;
         if (score < bestScore) { bestScore = score; best = { root, type: t.id, bass: bass != null && bass !== root ? bass : null }; }
       });
     });

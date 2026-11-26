@@ -6,9 +6,12 @@
 //   atBar(ended) -> id | 'stop' | null    at a bar line; ended = the section reached its end. null: keep playing
 //                                         (a main that ended loops)
 //   State for the page: playing, current, pending (switches at the next bar line), after (where a one-shot
-//   goes next), main (the selected main letter), armed (an intro chosen while stopped), autoFill.
+//   goes next), main (the selected main letter), intro (the selected intro: START plays it; null = none),
+//   ending (the selected ending: STOP plays it; null = stop at once), autoFill.
+//   intro and ending start as the style's first ones and stay selected from one start to the next.
 // While stopped:
-//   - INTRO arms that intro (press again to disarm). START plays it, then the main.
+//   - INTRO selects the intro START plays, then the main (the selected one again: no intro).
+//   - ENDING selects the ending STOP plays (the selected one again: STOP stops at once).
 //   - MAIN selects which main START (or the intro) leads to.
 // While playing:
 //   - MAIN X goes to main X at the next bar line. With auto-fill, a fill comes first (see fillFor).
@@ -32,7 +35,8 @@
       this.playing = false;
       this.current = null; this.pending = null; this.after = null;
       this.main = this.mains()[0] || 'A';
-      this.armed = null;
+      this.intro = this.oneOf('intro', 'A');
+      this.ending = this.oneOf('ending', 'A');
       this.autoFill = true;
     }
     mains() { return LETTERS.filter((l) => this.has['main' + l]); }
@@ -69,7 +73,8 @@
 
     press(kind, letter) {
       if (!this.playing) {
-        if (kind === 'intro') { const id = this.oneOf('intro', letter); this.armed = this.armed === id ? null : id; }
+        if (kind === 'intro') { const id = this.oneOf('intro', letter); if (id) this.intro = this.intro === id ? null : id; }
+        else if (kind === 'ending') { const id = this.oneOf('ending', letter); if (id) this.ending = this.ending === id ? null : id; }
         else if (kind === 'main') { const id = this.mainId(letter); if (id) this.main = letterOf(id); }
         return;
       }
@@ -95,7 +100,7 @@
         if (br) { this.pending = br; this.after = this.mainId(this.main); }
       } else if (kind === 'ending') {
         const end = this.oneOf('ending', letter);
-        if (end) { this.pending = end; this.after = 'stop'; }
+        if (end) { this.pending = end; this.after = 'stop'; this.ending = end; }
       } else if (kind === 'intro') {
         const intro = this.oneOf('intro', letter);
         if (intro) { this.pending = intro; this.after = this.mainId(this.main); }
@@ -103,13 +108,20 @@
     }
 
     start() {
-      const first = this.armed || this.mainId(this.main);
+      const first = this.intro || this.mainId(this.main);
       if (!first) return null;
       this.playing = true;
       this.current = first; this.pending = null;
       this.after = kindOf(first) === 'intro' ? this.mainId(this.main) : null;
-      this.armed = null;
       return first;
+    }
+    // STOP while playing: true = stop now (no ending selected, or the ending already playing / queued); else the
+    // selected ending is queued and the style stops after it.
+    requestStop() {
+      if (!this.playing) return true;
+      if (!this.ending || kindOf(this.current) === 'ending' || kindOf(this.pending) === 'ending') return true;
+      this.pending = this.ending; this.after = 'stop';
+      return false;
     }
     stop() { this.playing = false; this.current = null; this.pending = null; this.after = null; }
 
