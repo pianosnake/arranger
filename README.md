@@ -2,10 +2,8 @@
 
 Live at https://pianosnake.github.io/arranger/
 
-A Web MIDI page that plays Yamaha `.sty` and Roland `.stl` / `.sth` accompaniment styles. You play chords with your
-left hand, the page finds the chord, and it plays the style through its built-in General MIDI synth (FreeFont), or
-sends the parts on separate MIDI channels, so a host can route them (for example everything to a GM SoundFont player,
-drums to a drum plugin). It comes with 11 styles to start with; add your own with +.
+A Web MIDI page that plays Yamaha `.sty` and Roland `.stl` / `.sth` accompaniment styles. Connect a MIDI keyboard to this page, play chords on it, and the page plays the selected style through its built-in General MIDI synth (FreeFont), or
+sends the parts on separate MIDI channels. It comes with 11 styles to start with; add your own with +.
 
 It needs a browser with Web MIDI: desktop Chrome or Edge, or on the iPad / iPhone a Web MIDI browser app.
 
