@@ -22,7 +22,7 @@
     outPort: saved.outPort || {},                // { id, name } of the output, or { none: true }
     outMode: saved.outMode === 'midi' ? 'midi' : 'synth', // OUTPUT › SOUND: the built-in SoundFont synth (default: it has a bank, FreeFont) or a MIDI port
     clockPort: saved.clockPort || { none: true }, // where MIDI clock goes; none by default
-    rhChannel: saved.rhChannel || 0,             // right hand (keys from the split up) to this channel; 0 = off
+    rhChannel: saved.rhChannel || 0,             // PLAY ABOVE SPLIT POINT: the keys from the split up to this channel; 0 = off
     // The default PARTS setup is the built-in one (ChannelMap defaults). Older versions saved PARTS changes here for
     // every style (a part muted once stayed muted everywhere); that saved setup is dropped. A style's own changes are
     // in its settings (parts), kept by its music hash.
@@ -198,14 +198,19 @@
   })();
   const sfView = { msg: '', warn: false, loading: false, tapShown: '' };
   const startWait = { timer: null, until: 0 };   // a start waiting for the sound to come back (waitForSound)
+  // PLAY ABOVE SPLIT POINT on: its keys may come out late (behind the style's notes), more so through the built-in synth.
+  function renderRhNote() {
+    $('rh-note').hidden = !state.rhChannel;
+    $('rh-synth-note').hidden = state.outMode !== 'synth';
+  }
   function sfMsg(text, warn) { sfView.msg = text; sfView.warn = !!warn; renderSynth(); }
   function renderSynth() {
     const on = state.outMode === 'synth';
     $('out-mode').value = state.outMode;
     $('out-port-field').hidden = on;
     $('sf-field').hidden = !on;
-    $('rh-note').hidden = !on;
-    $('sf-mem-note').hidden = !on;                 // a bank costs about its file size in memory                     // the right hand through the built-in synth is a little late
+    renderRhNote();
+    $('sf-mem-note').hidden = !on;                 // a bank costs about its file size in memory
     $('sf-name').textContent = sfView.loading ? 'Loading…' : (synth.bankName || 'No bank');
     let text = sfView.msg, warn = sfView.warn;
     if (synth.status === 'error') { text = `The synth didn't start: ${synth.error}`; warn = true; } else if (synth.status === 'starting') text = 'Starting the synth…';
@@ -519,7 +524,7 @@
     state.clockPort = p ? A.MidiPorts.ref(outs, p) : { none: true };
     save(); connect();
   });
-  $('rh-channel').addEventListener('change', (ev) => { state.rhChannel = Number(ev.target.value); save(); });
+  $('rh-channel').addEventListener('change', (ev) => { state.rhChannel = Number(ev.target.value); save(); renderRhNote(); });
   $('chord-start').addEventListener('change', (ev) => { state.chordStart = ev.target.checked; save(); });
   $('play-bg').addEventListener('change', (ev) => {
     state.playInBackground = ev.target.checked; save(); renderMemory(); setAhead();
@@ -1241,4 +1246,11 @@
   start();
   if (state.outMode === 'synth') bootSynth();
   requestAnimationFrame(renderCounter);
+
+  // Offline as an installed app (sw.js keeps the page's files on the device). Only on the published site, or with
+  // ?sw for a test: during development (localhost, the iPad over http) the files always come fresh.
+  const swHere = /(^|\.)pianosnake\.com$|\.github\.io$/.test(location.hostname) || /[?&]sw\b/.test(location.search);
+  if (swHere && window.isSecureContext && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* runs as before, online */ });
+  }
 }());

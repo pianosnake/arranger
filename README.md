@@ -16,10 +16,12 @@ A Web MIDI page that plays Yamaha `.sty` and Roland `.stl` / `.sth` accompanimen
 3. **Chord detection** below a split point, with chord latch, inversions and slash chords.
 4. **Arranger sections:** intros, mains, fills, break and endings, with auto fill, sync start and "chord starts style".
 5. **Built-in synth** with a General MIDI SoundFont, or your own `.sf2`.
-6. **MIDI out:** each part on its own channel, with program change, mute and velocity per part, plus the right hand.
+6. **MIDI out:** each part on its own channel, with program change, mute and velocity per part.
 7. **MIDI clock out** so a looper or DAW follows along.
 8. **Tempo** with + / −, tap tempo, and volume, remembered for each style.
 9. **Style library:** folders, search, favorites, a time signature filter and zip backup, starting with 11 styles.
 
 
-It needs a browser with Web MIDI: desktop Chrome or Edge, Android Chrome or on the iPad / iPhone inside a [Web MIDI](https://apps.apple.com/us/app/web-midi-browser/id953846217) or [MIDI Web](https://midiweb.app/) browser app.
+It needs a browser with Web MIDI: desktop Chrome or Edge, Android Chrome or on the iPad / iPhone inside a [Web MIDI](https://apps.apple.com/us/app/web-midi-browser/id953846217) or [MIDI Web](https://midiweb.app/) browser app. MIDI Web also supports background playing for iOS.
+
+On Android, Chrome's menu › **Add to Home screen** installs it as a full-screen app that also works with no internet.

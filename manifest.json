@@ -1,0 +1,16 @@
+{
+  "name": "Pianosnake Arranger",
+  "short_name": "Arranger",
+  "description": "Plays Yamaha and Roland accompaniment styles along with the chords you play on a MIDI keyboard.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "background_color": "#24262b",
+  "theme_color": "#24262b",
+  "icons": [
+    { "src": "images/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "images/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "images/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "images/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
