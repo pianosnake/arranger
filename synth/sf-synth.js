@@ -7,13 +7,15 @@
 //   - FluidSynth in an AudioWorklet (128-frame blocks, ~3 ms; only on https / localhost there): "horrible, very choppy".
 //   - FluidSynth in a Web Worker feeding a copy-only output: "more choppy … not as smooth as before".
 //   - Smaller ScriptProcessor buffers: 1024 clean, 512 / 256 "robotic", and the right hand no sooner.
-// FluidSynth and the bank live in a hidden same-origin frame (sf-frame.html). It runs on the page's thread like the
+// FluidSynth and the bank live in a hidden same-origin frame (an empty one that the page runs FluidSynth's scripts in,
+// not a page of its own: MIDIWeb's offline save keeps scripts but not .html files). It runs on the page's thread like the
 // page itself, but it can be thrown away: WebAssembly memory never shrinks, so a new bank gets a new frame, and the
 // old bank's memory really goes back. The AudioContext and the ScriptProcessor stay on the page (a tap on the page
 // is what lets the audio start), and the processor calls the frame's synth to render.
 //
-//   new SoundFontSynth({ base, clock, onChange })
-//     base     put before the frame's address, synth/sf-frame.html ('': the page is index.html)
+//   new SoundFontSynth({ scripts, clock, onChange })
+//     scripts  the addresses of the frame's 3 scripts (FluidSynth, js-synthesizer, sf-load.js), in that order; the
+//              page passes them from its links (index.html), default: synth/… next to the page
 //     clock()  ms, the same clock as the timestamps passed to send (performance.now in the page)
 //   send(bytes, time)       like MIDIOutput.send: channel messages, played at time (clock ms), or now without one.
 //                           Timed messages go through FluidSynth's own sequencer, which runs on the samples rendered;
@@ -89,8 +91,8 @@
   class SoundFontSynth {
     constructor(o) {
       const opt = o || {};
-      this.base = opt.base || '';
-      this.frameUrl = opt.frame || 'synth/sf-frame.html?v=2';
+      // Names in two parts: MIDIWeb's offline save rewrites file-like strings in scripts (see DEFAULT_BANK in ui/app.js).
+      this.scripts = opt.scripts || null;       // null: synth/… next to the page (worked out when the frame opens)
       this.clock = opt.clock || (() => performance.now());
       this.onChange = opt.onChange || (() => {});
       this.status = 'off'; this.error = ''; this.bankName = '';
@@ -210,14 +212,22 @@
       const f = document.createElement('iframe');
       f.hidden = true; f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
       f.style.display = 'none';
-      const loaded = new Promise((resolve, reject) => {
-        f.onload = resolve;
-        f.onerror = () => reject(new Error('Could not load the synth'));
-      });
-      f.src = this.base + this.frameUrl;
       document.body.appendChild(f);
       this.frame = f; this.frameRate = rate;
-      await loaded;
+      // The frame loads nothing itself: the page fetches its scripts (through the page's service worker, and through
+      // MIDIWeb's saved copy, which answers fetch but not a frame's own requests) and runs their text in the frame.
+      const scripts = this.scripts || ['lib/libfluidsynth-2.4.6' + '.js', 'lib/js-synthesizer.min' + '.js', 'sf-load' + '.js']
+        .map((x) => new URL('synth/' + x, document.baseURI).href);
+      const texts = await Promise.all(scripts.map(async (u) => {
+        let r;
+        try { r = await fetch(u); } catch (e) { throw new Error('Could not load the synth: ' + u); }
+        if (!r.ok && r.status !== 0) throw new Error(`Could not load the synth: ${u} (${r.status})`);
+        return r.text();
+      }));
+      if (f !== this.frame) return;              // closed meanwhile
+      const d = f.contentDocument;
+      d.open(); d.write('<!doctype html><meta charset="utf-8"><title></title>'); d.close();
+      texts.forEach((code) => { const el = d.createElement('script'); el.text = code; d.head.appendChild(el); });
       const w = f.contentWindow;
       if (!w || !w.arrangerBoot) { this.closeFrame(); throw new Error('Could not load the synth'); }
       const r = await w.arrangerBoot(rate, { initialGain: this.gain, polyphony: 256 });

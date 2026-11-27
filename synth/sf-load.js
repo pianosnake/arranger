@@ -2,7 +2,8 @@
 // js-synthesizer's own loadSFont copies the bank into Emscripten's in-memory file system (FS.writeFile) before
 // FluidSynth reads it. Here the file system is told it may own the bytes (FS.write with canOwn), so the only other
 // copy is the one FluidSynth keeps. The file is removed again at once. Returns the SoundFont id (< 0: not a bank).
-// Loaded in the synth's frame (sf-frame.html), after the FluidSynth library.
+// Also arrangerBoot(rate, settings) -> { synth, seq }: FluidSynth and its sequencer at this sample rate.
+// Loaded in the synth's frame (SoundFontSynth writes it), after the FluidSynth library.
 (function () {
   'use strict';
   let serial = 0;
@@ -10,7 +11,7 @@
   function arrangerLoadSFont(synth, param) {
     const M = self.Module;
     const bytes = new Uint8Array(param.buffer);
-    const name = '/arranger-bank-' + (++serial) + '.sf2';
+    const name = '/arranger-bank-' + (++serial);   // no extension: MIDIWeb's offline save rewrites file-like strings
     const stream = M.FS.open(name, 'w');
     M.FS.write(stream, bytes, 0, bytes.length, 0, true);   // canOwn: the file uses these bytes, no copy
     M.FS.close(stream);
@@ -29,6 +30,18 @@
     return n;
   }
 
+  // A synth and its sequencer at this sample rate. The sequencer runs on the samples rendered (not a timer).
+  async function arrangerBoot(rate, settings) {
+    self.JSSynth.Synthesizer.initializeWithFluidSynthModule(self.Module);
+    await self.JSSynth.Synthesizer.waitForWasmInitialized();
+    const synth = new self.JSSynth.Synthesizer();
+    synth.init(rate, settings);
+    const seq = await self.JSSynth.Synthesizer.createSequencer();
+    await seq.registerSynthesizer(synth);
+    return { synth, seq };
+  }
+
+  self.arrangerBoot = arrangerBoot;
   self.arrangerLoadSFont = arrangerLoadSFont;
   self.arrangerSweep = arrangerSweep;
 }());

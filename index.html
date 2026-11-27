@@ -7,6 +7,27 @@
   <link rel="icon" href="images/icon-192.png">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#24262b">
+  <!-- The files the page fetches by script (the built-in bank and styles), named here so that an app saving the
+       page for offline use (MIDIWeb) saves them too. The page fetches each one through its link (fetchDefault in
+       ui/app.js, by data-file), so a saved copy that renames them (MIDIWeb turns ?v=1 into a name) still finds
+       them. Keep in step with defaults/; bump a file's ?v= when it changes. No ' in file
+       names: MIDIWeb's saved copy can't serve them. -->
+  <!-- The built-in synth's scripts: sf-synth.js writes them into its frame from these links' addresses. -->
+  <link rel="prefetch" href="synth/lib/libfluidsynth-2.4.6.js?v=1" data-file="synth/lib/libfluidsynth-2.4.6.js">
+  <link rel="prefetch" href="synth/lib/js-synthesizer.min.js?v=1" data-file="synth/lib/js-synthesizer.min.js">
+  <link rel="prefetch" href="synth/sf-load.js?v=4" data-file="synth/sf-load.js">
+  <link rel="prefetch" href="defaults/FreeFont.sf2?v=1" data-file="FreeFont.sf2">
+  <link rel="prefetch" href="defaults/library.json?v=2" data-file="library.json">
+  <link rel="prefetch" href="defaults/styles/WORLD/70s%20Disco.STL?v=1" data-file="styles/WORLD/70s Disco.STL">
+  <link rel="prefetch" href="defaults/styles/WORLD/Polca%201.STL?v=1" data-file="styles/WORLD/Polca 1.STL">
+  <link rel="prefetch" href="defaults/styles/WORLD/Tarantella.STL?v=1" data-file="styles/WORLD/Tarantella.STL">
+  <link rel="prefetch" href="defaults/styles/WORLD/Thats%20Mambo.STL?v=1" data-file="styles/WORLD/Thats Mambo.STL">
+  <link rel="prefetch" href="defaults/styles/WORLD/RHUMBA1.STL?v=1" data-file="styles/WORLD/RHUMBA1.STL">
+  <link rel="prefetch" href="defaults/styles/WORLD/SAMBA5.STL?v=1" data-file="styles/WORLD/SAMBA5.STL">
+  <link rel="prefetch" href="defaults/styles/WORLD/RUMELI_1.STL?v=1" data-file="styles/WORLD/RUMELI_1.STL">
+  <link rel="prefetch" href="defaults/styles/WORLD/UK%20RockN.STL?v=1" data-file="styles/WORLD/UK RockN.STL">
+  <link rel="prefetch" href="defaults/styles/WORLD/Wien%20Waltz.STL?v=1" data-file="styles/WORLD/Wien Waltz.STL">
+  <link rel="prefetch" href="defaults/styles/WORLD/LAMBADA.STL?v=1" data-file="styles/WORLD/LAMBADA.STL">
   <link rel="stylesheet" href="ui/style.css?v=122">
 </head>
 <body>
@@ -216,16 +237,16 @@
   <script src="library/style-files.js?v=21"></script>
   <script src="library/style-library.js?v=46"></script>
   <script src="library/zip.js?v=9"></script>
-  <script src="library/library-backup.js?v=48"></script>
+  <script src="library/library-backup.js?v=49"></script>
   <script src="play/meter.js?v=4"></script>
   <script src="play/transposer.js?v=3"></script>
   <script src="play/section-flow.js?v=101"></script>
   <script src="play/gm-names.js?v=57"></script>
   <script src="play/channel-map.js?v=66"></script>
   <script src="play/player.js?v=106"></script>
-  <script src="synth/sf-synth.js?v=22"></script>
+  <script src="synth/sf-synth.js?v=25"></script>
   <script src="play/controls.js?v=76"></script>
   <script src="play/outbox.js?v=4"></script>
-  <script src="ui/app.js?v=156"></script>
+  <script src="ui/app.js?v=170"></script>
 </body>
 </html>

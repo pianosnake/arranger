@@ -16,7 +16,7 @@
   const isNode = typeof module !== 'undefined' && module.exports;
   const Zip = isNode ? require('./zip.js') : window.Arranger.Zip;
 
-  const MANIFEST = 'library.json';
+  const MANIFEST = 'library' + '.json';   // two parts: MIDIWeb's offline save rewrites file-like strings in scripts
   const safe = (s) => String(s || '').replace(/[\\/:*?"<>|\x00-\x1F]/g, '_').trim();
 
   async function backup(library, filter) {

@@ -7,6 +7,14 @@
   const A = window.Arranger;
   const N = A.ChordNames;
   const $ = (id) => document.getElementById(id);
+  // A file's prefetch link in index.html (by data-file: its whole name, else its last part, for a name a saver
+  // rewrote, e.g. midiweb://…/library/library.json). Its href is the file's address, also in a saved copy.
+  function linkFor(path) {
+    const links = Array.from(document.querySelectorAll('link[rel="prefetch"][data-file]'));
+    const last = (p) => String(p).split('/').pop();
+    return links.find((x) => x.getAttribute('data-file') === path) || links.find((x) => last(x.getAttribute('data-file')) === last(path)) || null;
+  }
+  const linked = (path) => { const l = linkFor(path); return l ? l.href : undefined; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const STORE = 'arranger-settings';
 
@@ -176,7 +184,9 @@
   // file is kept in IndexedDB (as the File itself, so a big bank isn't copied into memory to store it) and loads
   // again with the page. The synth has send(data, time) like a MIDI output, so the player, the right hand and PANIC
   // use it as one.
-  const synth = new A.SoundFontSynth({ clock: () => performance.now(), onChange: () => { renderSynth(); if (synth.status === 'stalled') rebuildSynth(); } });
+  // The synth frame's scripts from their links in index.html: the addresses a saved copy (MIDIWeb) gave them.
+  const synthScripts = ['libfluidsynth-2.4.6' + '.js', 'js-synthesizer.min' + '.js', 'sf-load' + '.js'].map(linked);
+  const synth = new A.SoundFontSynth({ scripts: synthScripts.every(Boolean) ? synthScripts : undefined, clock: () => performance.now(), onChange: () => { renderSynth(); if (synth.status === 'stalled') rebuildSynth(); } });
   window.arrangerSynth = synth;                  // for checking from the browser's console
   const bankStore = (() => {
     const open = () => new Promise((resolve, reject) => {
@@ -224,15 +234,23 @@
     $('sf-status').textContent = text;
     $('sf-status').classList.toggle('warn', warn);
   }
+  // A file size for people: 489 MB, 3.1 MB, 640 KB.
+  function sizeText(n) {
+    const mb = n / 1048576;
+    return mb >= 10 ? `${Math.round(mb)} MB` : mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+  }
   async function loadBank(file, keep) {
     if (/\.(sf3|dls)$/i.test(file.name)) { sfMsg(`${file.name}: only .sf2 banks work here. Convert it to .sf2 with Polyphone (free, polyphone.io).`, true); return; }
     sfView.loading = true; sfMsg(`Loading ${file.name}…`);
     try {
       // Not kept in a variable: the synth hands the bytes on (transferred, not copied) and nothing else holds them.
-      const r = await synth.load(await file.arrayBuffer(), file.name);
+      // Only their size is noted, shown after the sound count (the page's memory grows by about that much).
+      let bytes = file.size || 0;
+      const r = await synth.load(await file.arrayBuffer().then((buf) => { bytes = buf.byteLength; return buf; }), file.name);
       sfView.loading = false;
-      sfMsg(`${r.presets} sounds.`);
-      if (keep) bankStore.put(file.name, file).catch(() => sfMsg(`${r.presets} sounds. It couldn't be kept on this device: choose it again next time.`, true));
+      const what = `${r.presets} sounds, ${sizeText(bytes)}.`;
+      sfMsg(what);
+      if (keep) bankStore.put(file.name, file).catch(() => sfMsg(`${what} It couldn't be kept on this device: choose it again next time.`, true));
     } catch (e) {
       sfView.loading = false;
       const why = e && e.message ? e.message : String(e);
@@ -253,11 +271,19 @@
   let synthBooted = false;
   // What comes with the app, in defaults/: a General MIDI bank and some styles (library.json and styles/, laid out
   // like an unzipped backup). The styles are added once, on the first start; the bank is used until one is chosen.
-  const DEFAULT_BANK = 'FreeFont.sf2';
+  // Written in two parts on purpose: MIDIWeb, saving a page for offline use, rewrites anything in a script that looks
+  // like a file name into its own address (midiweb://…/ui/FreeFont.sf2), which then matched no file.
+  const DEFAULT_BANK = 'FreeFont' + '.sf2';
+  // Status 0 with a body is a file all the same: an app's own scheme (MIDIWeb's saved pages, midiweb://) can answer
+  // without an HTTP status, so fetch says not ok.
+  // Through its prefetch link in index.html when there is one (by data-file): the address a saved copy gave it.
   async function fetchDefault(path) {
-    const r = await fetch('defaults/' + path.split('/').map(encodeURIComponent).join('/'));
-    if (!r.ok) throw new Error(`${path}: ${r.status}`);
-    return new Uint8Array(await r.arrayBuffer());
+    const link = linkFor(path);
+    const r = await fetch(link ? link.href : 'defaults/' + path.split('/').map(encodeURIComponent).join('/'));
+    if (!r.ok && r.status !== 0) throw new Error(`${path}: ${r.status}`);
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (!bytes.length) throw new Error(`${path}: empty (${r.status})`);
+    return bytes;
   }
   async function bootSynth() {
     if (synthBooted) return;
@@ -1207,7 +1233,10 @@
       try {
         const manifest = JSON.parse(new TextDecoder().decode(await fetchDefault(A.LibraryBackup.MANIFEST)));
         await A.LibraryBackup.restoreFolder(library, manifest, fetchDefault);
-      } catch (e) { return; }
+      } catch (e) {
+        showMessages(`<div class="warn">The built-in styles couldn't be loaded (${esc(e && e.message ? e.message : String(e))}). The page tries again next time.</div>`);
+        return;
+      }
     }
     state.defaultsAdded = true;
     save();

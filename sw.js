@@ -14,12 +14,9 @@
 
 const CACHE = 'arranger-1';
 const SCOPE = self.registration.scope;
-// Kept at install, besides what index.html names: files only scripts ask for (the synth's frame and its libraries,
-// the built-in bank), so they're there even if the first visit never started the synth.
-const EXTRA = [
-  'synth/sf-frame.html', 'synth/sf-load.js', 'synth/lib/libfluidsynth-2.4.6.js', 'synth/lib/js-synthesizer.min.js',
-  'defaults/FreeFont.sf2', 'defaults/library.json', 'manifest.json', 'images/icon-192.png', 'images/icon-512.png',
-];
+// Kept at install, besides what index.html names (which includes the synth's frame and libraries, the built-in bank
+// and styles).
+const EXTRA = ['manifest.json', 'images/icon-192.png', 'images/icon-512.png'];
 
 const versioned = (url) => /[?&]v=/.test(new URL(url).search);
 const sameOrigin = (url) => new URL(url).origin === self.location.origin;
@@ -96,8 +93,8 @@ self.addEventListener('fetch', (ev) => {
   const req = ev.request;
   if (req.method !== 'GET' || !sameOrigin(req.url) || !req.url.startsWith(SCOPE)) return;
   if (req.headers.has('range')) return;
-  // The page itself, however it was opened (/arranger/, index.html, ?sw): one copy. Only the page: the synth's frame
-  // (synth/sf-frame.html) is a navigation too.
+  // The page itself, however it was opened (/arranger/, index.html, ?sw): one copy. Only the page: a frame with an
+  // address of its own would be a navigation too.
   const path = new URL(req.url).pathname, top = new URL(SCOPE).pathname;
   const url = req.mode === 'navigate' && (path === top || path === top + 'index.html') ? SCOPE : req.url;
   ev.respondWith((async () => {
