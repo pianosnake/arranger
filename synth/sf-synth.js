@@ -26,6 +26,7 @@
 //   setGain(0..1), gain
 //   park() / unpark()       another output is in use: silence and suspend the audio / resume it
 //   status: 'off' | 'starting' | 'ready' | 'stalled' (the audio stopped rendering: restart()) | 'error';  bankName;  error;  suspended()
+//   timed()                 the audio is running and its clock has been measured since it (re)started: timed sends land on time
 //   toEvent(bytes)          (static) the js-synthesizer sequencer event for a channel message, or null
 // The frame (and so the libraries) is made the first time the synth is needed, so a page that only uses MIDI ports
 // doesn't load them.
@@ -157,6 +158,7 @@
     changed() { try { this.onChange(this); } catch (e) { /* the page's problem */ } }
 
     suspended() { return !!this.ctx && this.ctx.state !== 'running'; }
+    timed() { return !!this.ctx && this.ctx.state === 'running' && this.status === 'ready' && this.offset != null && !this.fresh; }
 
     start() {
       if (this.starting) return this.starting;
@@ -286,6 +288,10 @@
       if (!this.synth || this.sfontId == null) return;
       const ev = toEvent(data);
       if (!ev) return;
+      // No new notes while the audio is off (iOS keeps it off after the background until a tap): they'd wait in the
+      // synth and all sound at once when the audio came back, a burst on the next tap (2026-11-26). Note-offs,
+      // controllers and program changes still go in, so nothing hangs and the sounds stay right.
+      if (ev.type === 'noteon' && this.suspended()) return;
       if (time == null || this.offset == null) { play(this.synth, ev); return; }
       this.seq.sendEventAt(ev, noteTick(this.lastOn, ev, Math.max(0, Math.round(time + this.offset))), true);
     }

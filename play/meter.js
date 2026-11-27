@@ -5,6 +5,7 @@
 //   groups             pulses per group, e.g. 11/8 = [3,3,3,2]; default from Meter.defaultGroups
 //   position(tick)     { bar, pulse, group, first } for a tick counted from a bar line: bar number (0-based),
 //                      pulse in the bar, the group it's in, and whether it starts its group
+//   nextBeat(tick)     the first beat (group start) after tick, counted from a bar line
 // Loaded as a classic script (window.Arranger.Meter) or with require() in Node (tests).
 (function () {
   'use strict';
@@ -36,6 +37,9 @@
       this.groupOf = [];                 // pulse -> group index
       this.starts = [];                  // pulse -> starts its group
       g.forEach((size, k) => { for (let p = 0; p < size; p++) { this.groupOf.push(k); this.starts.push(p === 0); } });
+      this.beatTicks = [];               // ticks of the group starts within a bar
+      let at = 0;
+      g.forEach((size) => { this.beatTicks.push(Math.round(at * this.pulseTicks)); at += size; });
     }
     position(tick) {
       const t = Math.max(0, tick);
@@ -44,6 +48,11 @@
       return { bar, pulse, group: this.groupOf[pulse], first: this.starts[pulse] };
     }
     // 'ms per quarter note' helpers: tempo is always in quarter notes per minute (what both formats store).
+    nextBeat(tick) {
+      const bar = Math.floor(tick / this.barTicks + 1e-9), inBar = tick - bar * this.barTicks;
+      const b = this.beatTicks.find((t) => t > inBar + 1e-6);
+      return bar * this.barTicks + (b == null ? this.barTicks : b);
+    }
     msPerTick(bpm) { return 60000 / (bpm * this.ppq); }
     toString() { return this.num + '/' + this.den; }
   }

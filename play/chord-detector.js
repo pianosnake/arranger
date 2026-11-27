@@ -10,7 +10,7 @@
 //   noteOn(n) / noteOff(n) / allOff()
 //   chord              the current chord (null until the first one)
 //   held()             the held notes, sorted
-// Options: settleMs (30): a chord is only read once no new key came for this long, so a rolled chord gives one
+// Options: settleMs (10): a chord is only read once no new key came for this long, so a rolled chord gives one
 // change, not three. memory (true): the chord stays when all keys are released, as on arranger keyboards; off: it
 // goes to null. Only a key press reads the chord again; lifting one key of a chord changes nothing.
 // timer: { set(fn, ms) -> handle, clear(handle) }, setTimeout by default (tests pass a fake one).
@@ -70,7 +70,8 @@
   class ChordDetector {
     constructor(opts) {
       const o = opts || {};
-      this.settleMs = o.settleMs == null ? 30 : o.settleMs;
+      // 10 ms (was 30): every ms here is heard as the chord change coming late (2026-11-26, JazzSamba's strums).
+      this.settleMs = o.settleMs == null ? 10 : o.settleMs;
       this.memory = o.memory == null ? true : !!o.memory;
       this.timer = o.timer || REAL_TIMER;
       this.onChord = o.onChord || (() => {});

@@ -195,7 +195,8 @@
       put: (name, file) => run('readwrite', (st) => st.put({ name, file }, 'current')),
     };
   })();
-  const sfView = { msg: '', warn: false, loading: false, tapShown: false };
+  const sfView = { msg: '', warn: false, loading: false, tapShown: '' };
+  const startWait = { timer: null, until: 0 };   // a start waiting for the sound to come back (waitForSound)
   function sfMsg(text, warn) { sfView.msg = text; sfView.warn = !!warn; renderSynth(); }
   function renderSynth() {
     const on = state.outMode === 'synth';
@@ -211,7 +212,8 @@
     const needTap = on && !!synth.bankName && (synth.suspended() || synth.status === 'stalled');
     if (needTap) { text = 'Tap anywhere on the page to start the sound.'; warn = true; }
     // The same in the header, where it's seen while playing (the settings are usually closed).
-    if (needTap !== sfView.tapShown) { sfView.tapShown = needTap; setStatus(needTap ? 'Tap the page to start the sound' : (midi.input ? midi.input.name : '')); }
+    const tapText = !needTap ? '' : startWait.timer != null ? 'Tap the page to start the sound: the style starts then.' : 'Tap the page to start the sound';
+    if (tapText !== sfView.tapShown) { sfView.tapShown = tapText; setStatus(tapText || (midi.input ? midi.input.name : '')); }
     $('sf-status').hidden = !on || !text;
     $('sf-status').textContent = text;
     $('sf-status').classList.toggle('warn', warn);
@@ -276,6 +278,7 @@
   // rhythm (2026-11-25). Again on coming back, for anything that came in on the way out.
   function toBackground() {
     sync.armed = false;
+    stopWaiting();
     const was = player.playing;
     if (was) player.stop();
     synth.quiet();
@@ -341,9 +344,39 @@
   function startStop() {
     if (!current) return;
     if (!player.playing && hidden()) return;       // nothing starts in the background (a chord, a foot switch)
+    if (!player.playing && soundOff()) { waitForSound(); return; }
     flashStart();
     if (player.playing) player.stop(); else { player.setChord(detector.chord); player.start(); }
     renderTransport();
+  }
+
+  // Back from the background on the iPad, iOS keeps the built-in synth's audio off until a tap on the page; a MIDI
+  // key or switch doesn't count. A style started then played into the stopped synth, and its notes all came out at
+  // once on the next tap (2026-11-26). So a start while the sound is off (START from a controller, SYNC START, a
+  // chord) waits instead: the header asks for a tap, and the style starts as soon as the sound is back and the
+  // synth's clock is measured again, so it starts on time. Pressing START again cancels; so does the background.
+  const soundOff = () => midi.output === synth && (synth.suspended() || synth.status !== 'ready');
+  function stopWaiting(msg) {
+    if (startWait.timer == null) return;
+    clearInterval(startWait.timer); startWait.timer = null;
+    $('start').classList.remove('waiting');
+    renderSynth();
+    if (msg != null) setStatus(msg);
+  }
+  function waitForSound() {
+    if (startWait.timer != null) { stopWaiting('Start cancelled.'); return; }
+    synth.resume();                                // iOS may allow it without a tap now; then no tap is needed
+    $('start').classList.add('waiting');
+    startWait.until = performance.now() + 30000;   // a tap much later shouldn't start a style by surprise
+    startWait.timer = setInterval(() => {
+      if (hidden() || !current || player.playing) { stopWaiting(); return; }
+      if (performance.now() > startWait.until) { stopWaiting('Start cancelled: the page was never tapped.'); return; }
+      if (soundOff() || !synth.timed()) return;
+      stopWaiting(midi.input ? midi.input.name : '');
+      startStop();
+    }, 50);
+    renderSynth();                                 // the header asks for the tap, saying the style starts then
+    if (!sfView.tapShown) setStatus('Waiting for the sound to start…');
   }
 
   // ---------- settings pane ----------

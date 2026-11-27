@@ -17,7 +17,10 @@
 //   start() / stop()
 //   press(kind, letter)                the section buttons (SectionFlow.press)
 //   setChord(chord)                    the held chord; while playing, sounding notes follow it (each pattern's
-//                                      retrigger rule) and patterns that start playing for it come in at once
+//                                      retrigger rule) and patterns that start playing for it come in. A chord
+//                                      pressed a little early (up to an 8th note before a beat, SNAP_TICKS) takes
+//                                      effect on that beat; one pressed on or after a beat, at once. pendingChord
+//                                      holds an early one until its beat.
 //   setNoteFloors({ partId: note })    notes of that part below `note` (as written in the pattern) aren't played:
 //                                      Roland guitar parts use keys far below a guitar's range for strum / fret
 //                                      noises, which a GM guitar plays as very low notes
@@ -58,6 +61,7 @@
       this.sendClock = o.sendClock || null;
       this.style = null; this.flow = null; this.meter = null; this.map = null;
       this.tempo = 120; this.chord = null;
+      this.pendingChord = null;      // { chord, time }: pressed early, takes effect on the beat at time
       this.volume = 1;
       this.floors = {};
       this.soloPercussion = false;
@@ -149,6 +153,7 @@
 
     stop() {
       this.nextStyle = null;
+      if (this.pendingChord) { this.chord = this.pendingChord.chord; this.pendingChord = null; }   // pressed: it's the chord now
       if (this.handle != null) { this.timer.cancel(this.handle); this.handle = null; }
       const was = this.playing;
       this.playing = false;
@@ -209,20 +214,41 @@
       } else this.tempo = b;
     }
 
+    // Chords are usually played a little before the beat they belong to. Applied at once, the end of the old beat
+    // played with the new chord, a change between beats (2026-11-26). So a chord pressed up to an 8th note before a
+    // beat (a group start, as the beat counter shows: dotted quarters in 6/8) waits for that beat; one pressed on or
+    // after a beat changes at once, so a late chord isn't delayed further.
     setChord(chord) {
+      this.pendingChord = null;
+      const old = this.chord;
+      if (!this.playing || !chord || N.sameChord(old, chord)) { this.chord = chord; return; }
+      const now = this.clock();
+      const tick = Math.max(0, this.timeToTick(now));
+      const beat = this.meter.nextBeat(tick);
+      if (beat - tick <= this.style.ppq / 2) {
+        const time = this.tickToTime(beat);
+        if (time > this.tickToTime(this.done)) { this.pendingChord = { chord, time }; return; }   // pump() applies it
+        const batch = [];                        // that beat is already scheduled: change from it now
+        this.applyChord(chord, time, batch);
+        this.flush(batch);
+        return;
+      }
+      const batch = [];
+      this.applyChord(chord, now, batch);
+      this.flush(batch);
+    }
+    // The chord changes at time `at` (now, or a beat already scheduled): sounding and scheduled notes follow it,
+    // and patterns that didn't play for the old chord come in: their notes already under way (a Roland style's major
+    // strings when the chord goes from Dm to G), then the stretch already scheduled ahead.
+    applyChord(chord, at, batch) {
       const old = this.chord;
       this.chord = chord;
-      if (!this.playing || !chord || N.sameChord(old, chord)) return;
-      const now = this.clock(), batch = [];
-      this.revoice(now, old, batch);
-      // Patterns that didn't play for the old chord come in now: their notes already under way (a Roland style's
-      // major strings when the chord goes from Dm to G), then the stretch already scheduled ahead.
+      this.revoice(at, old, batch);
       const sec = this.style.sections[this.seg.section];
-      const from = Math.max(0, this.timeToTick(now));
+      const from = Math.max(0, this.timeToTick(at));
       const fresh = (pat) => !this.playedFor(pat, old);
-      this.enterHeld(sec, from, now, batch, fresh);
+      this.enterHeld(sec, from, at, batch, fresh);
       if (from < this.done) this.emit(sec, from, this.done, batch, fresh);
-      this.flush(batch);
     }
     // The notes of patterns coming in (only(pat)) that started before tick from and are still going: played from now
     // for the time they have left, as re-pitched notes are (more than a 16th, and not for a 'stop' rule).
@@ -311,6 +337,17 @@
         const sec = this.style.sections[this.seg.section];
         const until = this.timeToTick(horizon);
         const boundary = Math.min((Math.floor(this.done / bar + 1e-9) + 1) * bar, sec.lengthTicks);
+        // A chord waiting for its beat: schedule up to the beat with the old chord, change there, go on.
+        const pc = this.pendingChord;
+        if (pc) {
+          const at = Math.max(this.done, Math.round(this.timeToTick(pc.time)));
+          if (at < Math.min(until, boundary)) {
+            this.emit(sec, this.done, at, batch); this.emitClock(this.done, at, batch); this.done = at;
+            this.pendingChord = null;
+            this.applyChord(pc.chord, this.tickToTime(at), batch);
+            continue;
+          }
+        }
         if (until < boundary) { this.emit(sec, this.done, until, batch); this.emitClock(this.done, until, batch); this.done = until; break; }
         this.emit(sec, this.done, boundary, batch);
         this.emitClock(this.done, boundary, batch);

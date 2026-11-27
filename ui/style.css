@@ -487,3 +487,7 @@ label.btn { cursor: pointer; }
 @media (min-width: 1001px) {
   .sec-row > .sec-ending { margin-left: 40px; }
 }
+/* START pressed while the built-in synth's sound is off (back from the background on the iPad): it pulses until a
+   tap brings the sound back and the style starts (app.js adds .waiting). */
+@keyframes waiting { 50% { filter: brightness(.6); box-shadow: 0 0 0 4px rgba(127, 209, 127, .45); } }
+#start.waiting { animation: waiting 1s ease-in-out infinite; }
