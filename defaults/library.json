@@ -74,6 +74,13 @@
    "folder": "WORLD",
    "favorite": true,
    "settings": {}
+  },
+  {
+   "file": "styles/WORLD/BowIvry.STY",
+   "fileName": "Bows & Ivory.STY",
+   "folder": "WORLD",
+   "favorite": true,
+   "settings": {}
   }
  ]
 }
