@@ -500,3 +500,65 @@ label.btn { cursor: pointer; }
    tap brings the sound back and the style starts (app.js adds .waiting). */
 @keyframes waiting { 50% { filter: brightness(.6); box-shadow: 0 0 0 4px rgba(127, 209, 127, .45); } }
 #start.waiting { animation: waiting 1s ease-in-out infinite; }
+
+/* Short and wide (a phone in landscape, about 844 x 390): the list stays at the left, compact; at the right the chord
+   and the style side by side, INTRO / ENDING / FILL / BREAK on one line, MAIN, then START, all on one screen. */
+@media (min-width: 641px) and (max-height: 500px) {
+  .side { width: 260px; padding: 6px 6px 4px; gap: 6px; }
+  /* + and the folder button on the search's line: the pane is a grid, the list below takes the rest. */
+  #pane-styles { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; gap: 6px; }
+  #pane-styles > .list, #pane-styles > .lib-count { grid-column: 1 / -1; }
+  .logo img { height: 30px; }
+  .brand .side-gear { width: 36px; height: 36px; }
+  .brand .side-gear svg { width: 18px; height: 18px; }
+  .status-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lib-tools { flex-wrap: nowrap; }
+  .lib-tools .btn.icon { width: 34px; height: 36px; flex: none; }
+  .lib-tools .btn.icon svg { width: 18px; height: 18px; }
+  .search-box input { height: 36px; font-size: 15px; }
+  .search .star, .funnel { width: 28px; height: 36px; flex: none; }
+  .search .star svg, .funnel svg { width: 20px; height: 20px; }
+  .row { padding: 6px 8px; }
+  .row .row-name { font-size: 15px; }
+  .row .row-sub { font-size: 11px; margin-top: 0; }
+  .lib-count { display: none; }
+
+  .main { padding: 8px; gap: 8px; }
+  .top-row { flex-direction: row; gap: 8px; }
+  .chord-panel { width: 150px; padding: 6px 10px; justify-content: center; }
+  .chord-panel .chord-label, .style-panel > .chord-label, .style-sum { display: none; }
+  .chord { font-size: 40px; min-height: 40px; }
+  .chord-panel .counter { margin: 2px 0 0; font-size: 14px; min-height: 0; }
+  .style-panel { padding: 6px 10px; gap: 4px; }
+  .style-title { padding-right: 40px; }
+  .style-title .star svg { width: 20px; height: 20px; }
+  .style-name { font-size: 20px; }
+  .style-delete { width: 32px; height: 32px; top: 6px; right: 6px; }
+  .style-pills { gap: 8px; margin-top: 4px; }
+  .tempo.pill { padding: 2px; gap: 2px; }
+  .tempo.pill .btn { width: 34px; height: 36px; min-height: 36px; font-size: 20px; }
+  .tempo.pill .btn.tap { width: auto; padding: 0 10px; font-size: 13px; }
+  .tempo.pill .tempo-val { font-size: 18px; min-width: 40px; }
+  .tempo.pill .vol-label { font-size: 11px; padding-left: 8px; }
+
+  .sections-panel { padding: 8px 10px; gap: 6px; }
+  .sec-row { flex-wrap: nowrap; gap: 10px; }
+  .sec-spacer { display: none; }
+  .sec-row > .sec-ending { margin-left: 0; }
+  .sec-group { gap: 3px; }
+  .sec-group .sec-title { font-size: 10px; }
+  .sec-group .sec-btns { gap: 4px; }
+  .sections-panel .sec { width: 44px; height: 40px; min-height: 40px; font-size: 18px; border-radius: 9px; }
+  .sections-panel .sec.wide { width: auto; flex: 1 1 70px; height: 40px; font-size: 15px; }
+  .sections-panel .sec-mains { gap: 6px; }
+  .sections-panel .sec-mains .sec { height: 44px; min-height: 44px; font-size: 22px; border-radius: 10px; }
+
+  .transport { gap: 8px; flex-wrap: nowrap; }
+  .transport .btn.big { width: 118px; height: 44px; min-height: 44px; font-size: 17px; border-radius: 10px; gap: 8px; }
+  .transport .check { height: 40px; font-size: 11px; gap: 6px; padding: 0; }
+  .transport .check input { width: 22px; height: 22px; }
+  .transport .btn.panic { height: 40px; padding: 0 10px; font-size: 13px; border-radius: 10px; }
+  .parts-bar { height: 36px; padding: 0 12px; font-size: 13px; gap: 10px; }
+  .parts-bar-sum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .info-row:empty, .msgs:empty { display: none; }
+}
