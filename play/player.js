@@ -71,6 +71,11 @@
       this.history = [];             // recent segs, for position(): what is sounding now, not what was scheduled
       this.done = 0;                 // ticks of seg.section already scheduled
       this.sounding = [];            // notes sent: { ch, note, src, on, off, pattern }
+      // Notes whose note-off is sent too but that haven't started yet (flushOffs sends every off before the horizon):
+      // a chord change still turns them into the new chord's. 100 ms ahead that's little, but in the background the
+      // player sends 1.5 s ahead and those notes (a samba's short guitar hits) kept the old chord: the change was
+      // heard about a second late (2026-11-26).
+      this.ahead = [];
     }
 
     load(style, channelMap, groups) {
@@ -100,6 +105,7 @@
 
     start() {
       if (this.playing || !this.style) return false;
+      this.ahead = [];
       const first = this.flow.start();
       if (!first) return false;
       const t0 = this.clock() + START_DELAY;
@@ -160,6 +166,7 @@
       if (this.flow) this.flow.stop();
       const batch = [];
       this.releaseAll(this.clock(), batch);
+      this.ahead = [];
       if (was) this.neutral(this.clock(), batch);
       if (was && this.sendClock) batch.push({ time: this.clock(), kind: 'clock', data: [0xFC] });
       this.flush(batch);
@@ -288,6 +295,20 @@
     // played again at the new pitch for the time it has left (only if that's more than a 16th: short tails just end).
     revoice(now, old, batch) {
       const minMs = this.style.ppq / 4 * this.seg.mspt;
+      // Not started yet, already ended (see ahead): ended at its own start (an outbox takes the note back; elsewhere
+      // it's a blip) and sent again whole, at the new pitch.
+      this.ahead = this.ahead.filter((s) => s.on >= now);
+      this.ahead.forEach((s) => {
+        if (T.rhythmOnly(s.pattern.rule)) return;
+        const plays = T.plays(s.pattern.when, this.chord);
+        const n = T.note(s.src, s.pattern.rule, this.chord);
+        if (plays && n === s.note) return;
+        batch.push({ time: s.on, kind: 'off', data: [0x80 | (s.ch - 1), s.note, 0] });
+        if (!plays || s.pattern.rule.retrigger === 'stop') { s.gone = true; return; }
+        batch.push({ time: s.on, kind: 'on', data: [0x90 | (s.ch - 1), n, s.vel] }, { time: s.off, kind: 'off', data: [0x80 | (s.ch - 1), n, 0] });
+        s.note = n;
+      });
+      this.ahead = this.ahead.filter((s) => !s.gone);
       this.sounding.slice().forEach((s) => {
         if (s.off <= now || T.rhythmOnly(s.pattern.rule)) return;
         const plays = T.plays(s.pattern.when, this.chord);
@@ -435,7 +456,13 @@
     }
 
     flushOffs(until, batch) {
-      this.sounding.slice().forEach((s) => { if (s.off < until) this.end(s, s.off, batch); });
+      const now = this.clock();
+      if (this.ahead.length) this.ahead = this.ahead.filter((s) => s.on >= now);   // started: a chord can't change them
+      this.sounding.slice().forEach((s) => {
+        if (s.off >= until) return;
+        this.end(s, s.off, batch);
+        if (s.on > now) this.ahead.push(s);
+      });
     }
 
     flush(batch) {

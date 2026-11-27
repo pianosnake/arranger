@@ -5,7 +5,7 @@
   <title>Arranger</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="ui/style.css?v=121">
+  <link rel="stylesheet" href="ui/style.css?v=122">
 </head>
 <body>
   <aside class="side">
@@ -163,6 +163,12 @@
           <label class="field" title="Send the keys from the split up to this channel, so the right hand plays a sound too.">RIGHT HAND
             <select id="rh-channel"></select>
           </label>
+          <label class="check" title="Keep the style playing when you switch to another app or the screen turns off. Off: the style stops then.">
+            <input id="play-bg" type="checkbox"> PLAY IN BACKGROUND
+          </label>
+          <div class="note" id="play-bg-note" hidden>Only works in a browser app that keeps playing sound in the background (MIDIWeb 2.5.0
+            does). Elsewhere, the style may drag, stutter or go silent, and what it missed can come out in a burst when
+            you come back.</div>
           <div class="note" id="rh-note" hidden>With SOUNDFONT output the right hand plays with a delay, depending on the complexity of the current style. For the lowest latency, use MIDI PORT output to a hardware or app synth.</div>
         </section>
         <section class="set-group">
@@ -211,9 +217,10 @@
   <script src="play/section-flow.js?v=101"></script>
   <script src="play/gm-names.js?v=57"></script>
   <script src="play/channel-map.js?v=66"></script>
-  <script src="play/player.js?v=103"></script>
-  <script src="synth/sf-synth.js?v=19"></script>
+  <script src="play/player.js?v=106"></script>
+  <script src="synth/sf-synth.js?v=22"></script>
   <script src="play/controls.js?v=76"></script>
-  <script src="ui/app.js?v=140"></script>
+  <script src="play/outbox.js?v=4"></script>
+  <script src="ui/app.js?v=152"></script>
 </body>
 </html>

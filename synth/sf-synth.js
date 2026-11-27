@@ -26,6 +26,7 @@
 //   setGain(0..1), gain
 //   park() / unpark()       another output is in use: silence and suspend the audio / resume it
 //   status: 'off' | 'starting' | 'ready' | 'stalled' (the audio stopped rendering: restart()) | 'error';  bankName;  error;  suspended()
+//   onRender                called at the start of each audio block (~43 ms; it keeps running in the background)
 //   timed()                 the audio is running and its clock has been measured since it (re)started: timed sends land on time
 //   toEvent(bytes)          (static) the js-synthesizer sequencer event for a channel message, or null
 // The frame (and so the libraries) is made the first time the synth is needed, so a page that only uses MIDI ports
@@ -54,12 +55,20 @@
   // FluidSynth's sequencer runs a note-off before a note-on of the same tick, whatever order they were sent in. The
   // player ends a note at its own start when the style stops or an ending cuts it, so that note-off is moved just
   // after its note-on, or the note hangs. A note-off sent before the next note-on (a re-struck key) keeps its tick:
-  // there, off first is right. lastOn: channel * 128 + key -> tick of the last timed note-on.
+  // there, off first is right. lastOn: channel * 128 + key -> the ticks of its last timed note-ons (several: with
+  // PLAY IN BACKGROUND the player sends 1.5 s ahead, and a key can be struck twice in that time). An off moves
+  // after a note-on on its own tick, or after the last note-on when it's just before it (a clock resync moved it a
+  // little early). Moving any off before the last note-on past it (as it was) held an early note over the next
+  // one: after a chord change the old chord's notes rang into the new one (2026-11-26).
+  const RESYNC_SLACK = 30;
   function noteTick(lastOn, ev, tick) {
     const k = ev.channel * 128 + ev.key;
-    if (ev.type === 'noteon') lastOn[k] = tick;
-    else if (ev.type === 'noteoff' && lastOn[k] != null && tick <= lastOn[k]) return lastOn[k] + 1;
-    return tick;
+    if (ev.type === 'noteon') { const l = lastOn[k] || (lastOn[k] = []); l.push(tick); if (l.length > 16) l.shift(); return tick; }
+    const l = ev.type === 'noteoff' && lastOn[k];
+    if (!l || !l.length) return tick;
+    const last = Math.max.apply(null, l);
+    if (tick <= last && last - tick < RESYNC_SLACK) return last + 1;
+    return l.indexOf(tick) >= 0 ? tick + 1 : tick;
   }
 
   // An event played at once on a js-synthesizer synth.
@@ -92,7 +101,8 @@
       this.offset = null;              // sequencer tick - clock(), in ms
       this.starting = null;
       this.syncTimer = null;
-      this.lastOn = {};                // channel * 128 + key -> tick of the last timed note-on
+      this.lastOn = {};                // channel * 128 + key -> ticks of its last timed note-ons (noteTick)
+      this.onRender = null;            // called by each audio block before it renders (the page's background pacing)
       this.readings = [];
       this.parked = false;             // audio suspended on purpose (another output is in use)
       this.loading = false;
@@ -173,6 +183,7 @@
         // The page's processor renders whatever synth the frame has now (none while a new frame starts: silence).
         const node = ctx.createScriptProcessor(FRAMES, 0, 2);
         node.onaudioprocess = (e) => {
+          if (this.onRender) this.onRender();
           const s = this.synth, b = e.outputBuffer;
           if (s) s.render(b);
           else { b.getChannelData(0).fill(0); b.getChannelData(1).fill(0); }

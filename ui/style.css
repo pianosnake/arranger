@@ -411,6 +411,7 @@ label.btn.icon { cursor: pointer; }
 /* OUTPUT › BANK: the loaded SoundFont's name, cut short when it's long. */
 .sf-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--text); letter-spacing: 0; }
 #sf-status.warn { color: #e0796f; }
+#play-bg-note { color: #e0b46f; }
 
 /* Very narrow, one screen (iPad Split View beside a chord chart, about 507 x 744): the header and the style list back
    on top, made short (the list scrolls inside a few rows), and every control compact enough that the whole arranger

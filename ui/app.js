@@ -33,6 +33,7 @@
     collapsed: saved.collapsed || {},            // style list: folder name -> collapsed
     partsOpen: !!saved.partsOpen,                // the PARTS table shown (the bar opens / closes it)
     showFolders: saved.showFolders == null ? true : !!saved.showFolders,   // LAYOUT › SHOW FOLDERS: the list grouped by folder
+    playInBackground: !!saved.playInBackground,  // OUTPUT › PLAY IN BACKGROUND: don't stop when the page is hidden
     defaultsAdded: !!saved.defaultsAdded,        // the built-in styles (defaults/) were offered once; never again
   };
   function save() {
@@ -58,7 +59,7 @@
       const t = d[0] & 0xF0;
       // The right hand plays through on its own channel, straight away: nothing is drawn for it. Not while the page is
       // in the background (see 'background' below).
-      if (state.rhChannel && midi.output && !hidden()) {
+      if (state.rhChannel && midi.output && !away()) {
         try { midi.output.send([t | (state.rhChannel - 1)].concat(Array.from(d).slice(1))); } catch (e) { /* port gone */ }
       }
     },
@@ -109,7 +110,7 @@
     const clockOut = A.MidiPorts.pick(outs, state.clockPort);
     if (clockOut !== midi.clock && midi.clock && player.playing) { try { midi.clock.send([0xFC]); } catch (e) { /* port gone */ } }
     midi.clock = clockOut;
-    player.sendClock = clockOut ? (data, time) => { try { clockOut.send(data, time); } catch (e) { /* port gone */ } } : null;
+    player.sendClock = clockOut ? (data, time) => { if (paced()) { outbox.push(clockOut, data, time); return; } try { clockOut.send(data, time); } catch (e) { /* port gone */ } } : null;
     fillPortMenu($('clock-port'), outs, clockOut);
     if (input) setConn('Connected', 'on');
     else setConn(ins.length ? 'No keyboard' : 'No MIDI inputs', 'off');
@@ -265,7 +266,7 @@
   }
   // Browsers start audio only from a tap or a key press.
   // wake() also replaces audio that iOS interrupted (the app was in the background, another audio app played).
-  ['pointerdown', 'touchend', 'keydown', 'click'].forEach((t) => document.addEventListener(t, () => synth.wake(), true));
+  ['pointerdown', 'touchend', 'keydown', 'click'].forEach((t) => document.addEventListener(t, () => { synth.wake(); startPacer(); }, true));
   // ---------- background ----------
   // In the background the browser slows the page's timers down (iOS stops them), so the player fell behind, notes
   // came late and slow, and on coming back everything it had missed went out at once. So the page stops sending:
@@ -273,10 +274,75 @@
   // until the page is back. "Background": the page is hidden (another app or tab in front, the iPad's home screen,
   // the screen off). Not a mere loss of focus: clicking into another window on the Mac keeps it playing.
   const hidden = () => document.visibilityState === 'hidden';
+  // OUTPUT › PLAY IN BACKGROUND (off by default) turns all of that off: the page carries on as if it were in front,
+  // with whatever the browser still gives it. For apps that keep a page's sound going in the background (MIDIWeb's
+  // TestFlight build on an iPhone 14, 2026-11-26). Web MIDI Browser on the iPad (iOS 15) takes the sound away whatever
+  // the page does.
+  const away = () => hidden() && !state.playInBackground;
+  // Playing in the background, the player's timer runs about once a second (measured in MIDIWeb's TestFlight build on
+  // an iPhone 14, 2026-11-26: 31 runs in 29 s; the page's clock kept time), so 100 ms ahead wasn't enough and the style
+  // slowed down. Hidden, it sends 1.5 s ahead; back in front, 100 ms again. A chord or a section change in the
+  // background still comes in (sounding notes follow it), a section change up to a bar later. The chord detector's
+  // 10 ms wait for the last key is a timer too (it would be up to a second): hidden, a chord is read on each key.
+  // That far ahead, what the page has sent can't be taken back, and a MIDI port's timestamps came out unevenly ("a
+  // drunken drummer") while a chord played into the built-in synth came in late, over the old one's notes. So in the
+  // background the notes wait in the page (Outbox) and go out from audio callbacks, which iOS keeps running on time:
+  //   - a MIDI port: a silent ScriptProcessor (512 frames, ~12 ms) sends each one when it's due. Its AudioContext
+  //     can only start on a tap: it's made on the switch and on any tap while it's on (not for the built-in synth).
+  //   - the built-in synth: its own audio blocks pass them on 120 ms ahead, with their timestamps.
+  // A chord change takes back what's still waiting (Outbox.push), and so does STOP.
+  const FRONT_AHEAD = 100, BACK_AHEAD = 1500;
+  const outbox = new A.Outbox(), synthBox = new A.Outbox();
+  const pacer = { ctx: null, node: null };
+  function startPacer() {
+    if (!state.playInBackground || state.outMode === 'synth') return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (pacer.ctx && pacer.ctx.state !== 'closed') { if (pacer.ctx.state !== 'running') pacer.ctx.resume().catch(() => {}); return; }
+    try {
+      const ctx = new AC(), node = ctx.createScriptProcessor(512, 0, 1);
+      node.onaudioprocess = () => { if (outbox.size) outbox.flush(performance.now() + 2); };
+      pacer.ctx = ctx; pacer.node = node;
+      pacePacer();
+    } catch (e) { pacer.ctx = null; pacer.node = null; }
+  }
+  // Its callbacks only while hidden: in front, ~86 a second on the page's thread made a MIDI port's timing uneven on
+  // the iPad Air 2 (2026-11-26). Disconnected, a ScriptProcessor isn't called; its AudioContext stays started.
+  function pacePacer() {
+    if (!pacer.node) return;
+    const on = hidden() && state.playInBackground;
+    if (on === !!pacer.connected) return;
+    try { if (on) pacer.node.connect(pacer.ctx.destination); else pacer.node.disconnect(); pacer.connected = on; } catch (e) { /* closed */ }
+  }
+  function stopPacer() {
+    outbox.all();
+    if (pacer.node) { pacer.node.onaudioprocess = null; try { pacer.node.disconnect(); } catch (e) { /* gone */ } }
+    if (pacer.ctx) pacer.ctx.close().catch(() => {});
+    pacer.ctx = null; pacer.node = null; pacer.connected = false;
+  }
+  const bgPaced = () => hidden() && state.playInBackground && !!pacer.connected && pacer.ctx.state !== 'closed';
+  const paced = bgPaced;
+  // 120 ms: a little more than an audio block (~46 ms) with room to spare; more, and a chord pressed just before a
+  // beat missed it (the beat's notes had gone to the synth already). Not checked against the AudioContext's state:
+  // iOS may report it otherwise in the background while it plays, and the notes then went to the synth 1.5 s ahead,
+  // the old chord ringing on for about a second after a change (2026-11-26). If the audio really stops, the notes
+  // wait here, and the late ones are dropped on coming back (no burst).
+  synth.onRender = () => { if (synthBox.size) synthBox.flush(performance.now() + 120, true); };
+  const synthPaced = () => hidden() && state.playInBackground;
+  function setAhead() {
+    const back = hidden() && state.playInBackground;
+    player.lookahead = back ? BACK_AHEAD : FRONT_AHEAD;
+    detector.settleMs = back ? 0 : 10;
+    pacePacer();
+    // Back in front: the rest goes out, timed; note-ons already late are dropped (no burst if the audio had stopped).
+    if (!hidden()) { outbox.all(performance.now() - 30); synthBox.all(performance.now() - 30); }
+    if (player.playing) player.pump();
+  }
   // The built-in synth also drops what it had queued: the style schedules ~100 ms ahead, and on the iPad iOS takes
   // the audio away with those notes still waiting, so the next tap that started the audio again played a bit of
   // rhythm (2026-11-25). Again on coming back, for anything that came in on the way out.
   function toBackground() {
+    if (state.playInBackground) return;
     sync.armed = false;
     stopWaiting();
     const was = player.playing;
@@ -286,6 +352,7 @@
     renderTransport();
   }
   document.addEventListener('visibilitychange', () => {
+    setAhead();
     if (hidden()) { toBackground(); return; }
     if (!player.playing) synth.quiet();
     synth.visible();
@@ -294,7 +361,7 @@
   $('out-mode').addEventListener('change', (ev) => {
     state.outMode = ev.target.value === 'synth' ? 'synth' : 'midi';
     save();
-    if (state.outMode === 'synth') { synth.resume(); bootSynth(); }
+    if (state.outMode === 'synth') { synth.resume(); bootSynth(); stopPacer(); } else startPacer();
     pickOutput();
   });
   $('sf-file').addEventListener('change', async (ev) => {
@@ -318,7 +385,12 @@
   const player = new A.StylePlayer({
     clock: () => performance.now(),
     timer: { every: (fn, ms) => setInterval(fn, ms), cancel: (h) => clearInterval(h) },
-    send: (data, time) => { if (midi.output) { try { midi.output.send(data, time); } catch (e) { /* port gone */ } } },
+    send: (data, time) => {
+      if (!midi.output) return;
+      if (midi.output !== synth && paced()) { outbox.push(midi.output, data, time); return; }
+      if (midi.output === synth && synthPaced()) { synthBox.push(synth, data, time); return; }
+      try { midi.output.send(data, time); } catch (e) { /* port gone */ }
+    },
     onChange: () => renderTransport(),
   });
   // PANIC: on every channel, sustain off, all sound off, all notes off and reset all controllers. Also sent when the page connects to an
@@ -343,10 +415,16 @@
   $('start').addEventListener('animationend', () => $('start').classList.remove('took'));
   function startStop() {
     if (!current) return;
-    if (!player.playing && hidden()) return;       // nothing starts in the background (a chord, a foot switch)
+    if (!player.playing && away()) return;         // nothing starts in the background (a chord, a foot switch)
     if (!player.playing && soundOff()) { waitForSound(); return; }
     flashStart();
-    if (player.playing) player.stop(); else { player.setChord(detector.chord); player.start(); }
+    if (player.playing) {
+      player.stop();
+      // Up to 1.5 s already sent (see setAhead): the built-in synth drops what's waiting. A MIDI port can't take
+      // back what it was sent: the pitched notes end at once, drums already sent still play.
+      if (player.lookahead > FRONT_AHEAD && midi.output === synth) synth.quiet();
+      outbox.dropNotes(); synthBox.dropNotes();    // what's still waiting in the page (background) is taken back
+    } else { player.setChord(detector.chord); player.start(); }
     renderTransport();
   }
 
@@ -369,7 +447,7 @@
     $('start').classList.add('waiting');
     startWait.until = performance.now() + 30000;   // a tap much later shouldn't start a style by surprise
     startWait.timer = setInterval(() => {
-      if (hidden() || !current || player.playing) { stopWaiting(); return; }
+      if (away() || !current || player.playing) { stopWaiting(); return; }
       if (performance.now() > startWait.until) { stopWaiting('Start cancelled: the page was never tapped.'); return; }
       if (soundOff() || !synth.timed()) return;
       stopWaiting(midi.input ? midi.input.name : '');
@@ -397,6 +475,8 @@
     $('chord-memory').checked = state.memory;
     $('chord-start').checked = state.chordStart;
     $('show-folders').checked = state.showFolders;
+    $('play-bg').checked = state.playInBackground;
+    $('play-bg-note').hidden = !state.playInBackground;
   }
   // The settings open as a window over the whole page; ✕, Escape or a tap on the dark background closes it.
   function showSettings(on) {
@@ -441,6 +521,10 @@
   });
   $('rh-channel').addEventListener('change', (ev) => { state.rhChannel = Number(ev.target.value); save(); });
   $('chord-start').addEventListener('change', (ev) => { state.chordStart = ev.target.checked; save(); });
+  $('play-bg').addEventListener('change', (ev) => {
+    state.playInBackground = ev.target.checked; save(); renderMemory(); setAhead();
+    if (state.playInBackground) startPacer(); else stopPacer();
+  });
   $('show-folders').addEventListener('change', (ev) => { state.showFolders = ev.target.checked; save(); renderLibrary(); showCurrentRow(); });
   $('chord-memory').addEventListener('change', (ev) => {
     state.memory = ev.target.checked; detector.setMemory(state.memory);
