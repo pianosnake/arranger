@@ -183,13 +183,6 @@
           <label class="field" title="Send MIDI clock (start, 24 clocks a quarter note, stop) so a looper or DAW follows the arranger's tempo. Can be the same port as the output.">CLOCK PORT
             <select id="clock-port"></select>
           </label>
-          <label class="field" title="Send the keys from the split up to this channel, so they play a sound too.">PLAY ABOVE SPLIT POINT
-            <select id="rh-channel"></select>
-          </label>
-          <div class="note" id="rh-note" hidden>The keys above the split point wait in the same queue as the style's
-            notes, so they may play with a delay.<span id="rh-synth-note"> With SOUNDFONT output the delay depends on the
-            complexity of the current style. For the lowest latency, use MIDI PORT output to a hardware or app
-            synth.</span></div>
           <label class="check" title="Keep the style playing when you switch to another app or the screen turns off. Off: the style stops then.">
             <input id="play-bg" type="checkbox"> PLAY IN BACKGROUND
           </label>
@@ -247,6 +240,6 @@
   <script src="synth/sf-synth.js?v=25"></script>
   <script src="play/controls.js?v=76"></script>
   <script src="play/outbox.js?v=4"></script>
-  <script src="ui/app.js?v=170"></script>
+  <script src="ui/app.js?v=171"></script>
 </body>
 </html>

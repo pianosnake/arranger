@@ -30,7 +30,6 @@
     outPort: saved.outPort || {},                // { id, name } of the output, or { none: true }
     outMode: saved.outMode === 'midi' ? 'midi' : 'synth', // OUTPUT › SOUND: the built-in SoundFont synth (default: it has a bank, FreeFont) or a MIDI port
     clockPort: saved.clockPort || { none: true }, // where MIDI clock goes; none by default
-    rhChannel: saved.rhChannel || 0,             // PLAY ABOVE SPLIT POINT: the keys from the split up to this channel; 0 = off
     // The default PARTS setup is the built-in one (ChannelMap defaults). Older versions saved PARTS changes here for
     // every style (a part muted once stayed muted everywhere); that saved setup is dropped. A style's own changes are
     // in its settings (parts), kept by its music hash.
@@ -62,15 +61,7 @@
   const sync = { armed: false };
   const keyboard = new A.KeyboardInput({
     channel: state.channel, split: state.split,
-    lower: detector,
-    upper: (d) => {
-      const t = d[0] & 0xF0;
-      // The right hand plays through on its own channel, straight away: nothing is drawn for it. Not while the page is
-      // in the background (see 'background' below).
-      if (state.rhChannel && midi.output && !away()) {
-        try { midi.output.send([t | (state.rhChannel - 1)].concat(Array.from(d).slice(1))); } catch (e) { /* port gone */ }
-      }
-    },
+    lower: detector,   // the keys from the split up aren't played: the player's own synth or app plays the right hand
     onSplit: (note) => {
       state.split = note; save();
       $('kb-split').value = String(note);
@@ -182,7 +173,7 @@
   // ---------- built-in synth ----------
   // OUTPUT › SOUND: SOUNDFONT plays the style here, through FluidSynth (WebAssembly) and a .sf2 bank. The bank
   // file is kept in IndexedDB (as the File itself, so a big bank isn't copied into memory to store it) and loads
-  // again with the page. The synth has send(data, time) like a MIDI output, so the player, the right hand and PANIC
+  // again with the page. The synth has send(data, time) like a MIDI output, so the player and PANIC
   // use it as one.
   // The synth frame's scripts from their links in index.html: the addresses a saved copy (MIDIWeb) gave them.
   const synthScripts = ['libfluidsynth-2.4.6' + '.js', 'js-synthesizer.min' + '.js', 'sf-load' + '.js'].map(linked);
@@ -208,18 +199,12 @@
   })();
   const sfView = { msg: '', warn: false, loading: false, tapShown: '' };
   const startWait = { timer: null, until: 0 };   // a start waiting for the sound to come back (waitForSound)
-  // PLAY ABOVE SPLIT POINT on: its keys may come out late (behind the style's notes), more so through the built-in synth.
-  function renderRhNote() {
-    $('rh-note').hidden = !state.rhChannel;
-    $('rh-synth-note').hidden = state.outMode !== 'synth';
-  }
   function sfMsg(text, warn) { sfView.msg = text; sfView.warn = !!warn; renderSynth(); }
   function renderSynth() {
     const on = state.outMode === 'synth';
     $('out-mode').value = state.outMode;
     $('out-port-field').hidden = on;
     $('sf-field').hidden = !on;
-    renderRhNote();
     $('sf-mem-note').hidden = !on;                 // a bank costs about its file size in memory
     $('sf-name').textContent = sfView.loading ? 'Loading…' : (synth.bankName || 'No bank');
     let text = sfView.msg, warn = sfView.warn;
@@ -301,7 +286,7 @@
   // ---------- background ----------
   // In the background the browser slows the page's timers down (iOS stops them), so the player fell behind, notes
   // came late and slow, and on coming back everything it had missed went out at once. So the page stops sending:
-  // the style stops (with its note-offs and MIDI clock Stop), the right hand isn't passed on, and nothing starts
+  // the style stops (with its note-offs and MIDI clock Stop), and nothing starts
   // until the page is back. "Background": the page is hidden (another app or tab in front, the iPad's home screen,
   // the screen off). Not a mere loss of focus: clicking into another window on the Mac keeps it playing.
   const hidden = () => document.visibilityState === 'hidden';
@@ -497,9 +482,6 @@
     for (let n = 24; n <= 96; n++) splits += `<option value="${n}">${N.noteName(n)}</option>`;
     $('kb-split').innerHTML = splits;
     $('kb-split').value = String(state.split);
-    $('rh-channel').innerHTML = '<option value="0">OFF</option>' +
-      Array.from({ length: 16 }, (_, k) => `<option value="${k + 1}">${k + 1}</option>`).join('');
-    $('rh-channel').value = String(state.rhChannel);
     renderMemory();
   }
   function renderMemory() {
@@ -550,7 +532,6 @@
     state.clockPort = p ? A.MidiPorts.ref(outs, p) : { none: true };
     save(); connect();
   });
-  $('rh-channel').addEventListener('change', (ev) => { state.rhChannel = Number(ev.target.value); save(); renderRhNote(); });
   $('chord-start').addEventListener('change', (ev) => { state.chordStart = ev.target.checked; save(); });
   $('play-bg').addEventListener('change', (ev) => {
     state.playInBackground = ev.target.checked; save(); renderMemory(); setAhead();

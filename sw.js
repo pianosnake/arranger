@@ -8,11 +8,11 @@
 //   - Everything else (the page itself, synth/lib/, defaults/, the manifest and icons) is checked in the background
 //     each time, and the new copy is used the next time. A new index.html (or any page) is only kept once the
 //     files it names are kept too, so an update can't leave a page offline that asks for files it doesn't have.
-//   - Not in the cache: the network, and the answer is kept. No network either: any version of that file.
+//   - Not in the cache: the network, and the answer is kept. No network, or not found there: any version of that file.
 // Bump CACHE only when this file's own way of working changes (the files themselves update by themselves).
 'use strict';
 
-const CACHE = 'arranger-1';
+const CACHE = 'arranger-1';   // the cache's name: keep it (a new name empties the phone's copy)
 const SCOPE = self.registration.scope;
 // Kept at install, besides what index.html names (which includes the synth's frame and libraries, the built-in bank
 // and styles).
@@ -104,12 +104,14 @@ self.addEventListener('fetch', (ev) => {
       if (!versioned(url)) ev.waitUntil(refresh(cache, url, hit).catch(() => {}));
       return hit;
     }
-    try {
-      return await refresh(cache, url);
-    } catch (e) {
-      const any = await cache.match(url, { ignoreSearch: true });
-      if (any) return any;
-      throw e;
-    }
+    // Not kept: the network. If that fails, or the file is gone from the site (an old page, still open once after an
+    // update, asked for a file the new version deleted: synth/sf-frame.html, 2026-11-27), any kept version of it.
+    let res;
+    try { res = await refresh(cache, url); } catch (e) { res = null; }
+    if (res && res.ok) return res;
+    const any = await cache.match(url, { ignoreSearch: true });
+    if (any) return any;
+    if (res) return res;
+    throw new Error('offline: ' + url);
   })());
 });
