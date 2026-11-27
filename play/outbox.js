@@ -11,7 +11,7 @@
 //   flush(now, timed)       send everything due by now, in time order; timed: with their timestamps
 //   all(late)               send everything now, with timestamps (back in front); late: note-ons due before this
 //                           time are dropped instead (the audio stopped: they'd all sound at once)
-//   dropNotes()             STOP: forget the note-ons still waiting (their note-offs, controllers, clock stay)
+//   dropNotes()             STOP: forget the note-ons still waiting (their note-offs and controllers stay)
 //   size
 // Loaded as a classic script (window.Arranger.Outbox) or with require() in Node (tests).
 (function () {

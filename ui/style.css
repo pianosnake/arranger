@@ -562,3 +562,15 @@ label.btn { cursor: pointer; }
   .parts-bar-sum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .info-row:empty, .msgs:empty { display: none; }
 }
+
+/* The settings window: every text 2 px bigger than the shared sizes above (asked for 2026-11-27). */
+#pane-settings .settings-head { font-size: 15px; }
+#pane-settings .group-title { font-size: 12px; }
+#pane-settings .field, #pane-settings .check { font-size: 12px; }
+#pane-settings .field select { font-size: 16px; }
+#pane-settings .note, #pane-settings .empty { font-size: 14px; }
+#pane-settings .btn { font-size: 13px; }
+#pane-settings .ctl-name { font-size: 14px; }
+#pane-settings .ctl-what { font-size: 13px; }
+#pane-settings .ctl-row .btn { font-size: 12px; }
+#pane-settings .ctl-row select { font-size: 13px; }

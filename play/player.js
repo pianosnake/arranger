@@ -7,9 +7,6 @@
 //     send(bytes, time)    time in clock ms; the page passes it to MIDIOutput.send
 //     lookahead (100 ms): how far ahead events are sent; interval (25 ms): how often it looks
 //     onChange()           the section, pending section or playing state changed
-//     sendClock(bytes, time)   optional, also settable later as player.sendClock (null: no clock): MIDI clock for
-//                          loopers and DAWs. Start (FA) on the first beat, 24 clocks (F8) a quarter note, continuous
-//                          through section changes, style changes and tempo changes, Stop (FC) when it stops.
 //   load(style, channelMap, groups?)   stops, then uses this style (groups: beat grouping, see Meter)
 //   changeStyle(style, channelMap, groups?, tempo?)   while playing: the new style takes over at the next bar line,
 //                                      straight into its Main A (no intro), at its own tempo (or `tempo`). Stopped:
@@ -43,7 +40,7 @@
   const N = isNode ? require('./chord-names.js') : window.Arranger.ChordNames;
 
   const START_DELAY = 30;            // ms between pressing START and the first beat (the voices go out first)
-  const ORDER = { clock: -1, off: 0, ctl: 1, on: 2 };
+  const ORDER = { off: 0, ctl: 1, on: 2 };
 
   function eventBytes(ev, ch) {
     const c = ch - 1;
@@ -58,7 +55,6 @@
       this.clock = o.clock; this.timer = o.timer; this.out = o.send;
       this.lookahead = o.lookahead || 100; this.interval = o.interval || 25;
       this.onChange = o.onChange || (() => {});
-      this.sendClock = o.sendClock || null;
       this.style = null; this.flow = null; this.meter = null; this.map = null;
       this.tempo = 120; this.chord = null;
       this.pendingChord = null;      // { chord, time }: pressed early, takes effect on the beat at time
@@ -116,7 +112,6 @@
       this.history = [];
       this.newSeg(first, t0);
       this.playing = true;
-      if (this.sendClock) batch.push({ time: t0, kind: 'clock', data: [0xFA] });
       this.flush(batch);
       this.handle = this.timer.every(() => this.pump(), this.interval);
       this.pump();
@@ -168,7 +163,6 @@
       this.releaseAll(this.clock(), batch);
       this.ahead = [];
       if (was) this.neutral(this.clock(), batch);
-      if (was && this.sendClock) batch.push({ time: this.clock(), kind: 'clock', data: [0xFC] });
       this.flush(batch);
       this.seg = null;
       if (was) this.onChange();
@@ -363,15 +357,14 @@
         if (pc) {
           const at = Math.max(this.done, Math.round(this.timeToTick(pc.time)));
           if (at < Math.min(until, boundary)) {
-            this.emit(sec, this.done, at, batch); this.emitClock(this.done, at, batch); this.done = at;
+            this.emit(sec, this.done, at, batch); this.done = at;
             this.pendingChord = null;
             this.applyChord(pc.chord, this.tickToTime(at), batch);
             continue;
           }
         }
-        if (until < boundary) { this.emit(sec, this.done, until, batch); this.emitClock(this.done, until, batch); this.done = until; break; }
+        if (until < boundary) { this.emit(sec, this.done, until, batch); this.done = until; break; }
         this.emit(sec, this.done, boundary, batch);
-        this.emitClock(this.done, boundary, batch);
         this.done = boundary;
         if (this.nextStyle) {                   // a style change takes over at this bar line
           const t = this.tickToTime(boundary);
@@ -387,7 +380,6 @@
           this.flushOffs(at, batch);
           this.releaseAll(at, batch);
           this.neutral(at, batch);
-          if (this.sendClock) batch.push({ time: at, kind: 'clock', data: [0xFC] });
           this.playing = false;
           if (this.handle != null) { this.timer.cancel(this.handle); this.handle = null; }
           this.stopAt = at;
@@ -447,14 +439,6 @@
       });
     }
 
-    // MIDI clock between two ticks of the section playing: one every ppq/24 ticks, counted from the section's start
-    // (sections are whole bars, so the clocks run on evenly from one section to the next).
-    emitClock(from, to, batch) {
-      if (!this.sendClock) return;
-      const step = this.style.ppq / 24;
-      for (let k = Math.ceil(from / step - 1e-9); k * step < to - 1e-9; k++) batch.push({ time: this.tickToTime(k * step), kind: 'clock', data: [0xF8] });
-    }
-
     flushOffs(until, batch) {
       const now = this.clock();
       if (this.ahead.length) this.ahead = this.ahead.filter((s) => s.on >= now);   // started: a chord can't change them
@@ -475,8 +459,7 @@
           this.baseVolume[ch] = m.data[2];
           if (this.volume !== 1) m.data = [m.data[0], 7, Math.max(0, Math.min(127, Math.round(m.data[2] * this.volume)))];
         }
-        if (m.kind !== 'clock') this.out(m.data, m.time);
-        else if (this.sendClock) this.sendClock(m.data, m.time);
+        this.out(m.data, m.time);
       });
     }
 

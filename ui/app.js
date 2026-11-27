@@ -29,7 +29,6 @@
     styleId: saved.styleId || null,              // the style last loaded from the library
     outPort: saved.outPort || {},                // { id, name } of the output, or { none: true }
     outMode: saved.outMode === 'midi' ? 'midi' : 'synth', // OUTPUT › SOUND: the built-in SoundFont synth (default: it has a bank, FreeFont) or a MIDI port
-    clockPort: saved.clockPort || { none: true }, // where MIDI clock goes; none by default
     // The default PARTS setup is the built-in one (ChannelMap defaults). Older versions saved PARTS changes here for
     // every style (a part muted once stayed muted everywhere); that saved setup is dropped. A style's own changes are
     // in its settings (parts), kept by its music hash.
@@ -81,7 +80,7 @@
   }
 
   // ---------- MIDI ----------
-  const midi = { access: null, input: null, output: null, clock: null };
+  const midi = { access: null, input: null, output: null };
   const hub = new A.MidiPorts.InputHub();
   function setConn(text, cls) { const el = $('conn-status'); el.textContent = text; el.className = 'status ' + cls; }
   function setStatus(text) { $('status-text').textContent = text || ''; }
@@ -106,12 +105,6 @@
     renderControls();
     fillPortMenu($('kb-port'), ins, input);
     pickOutput();
-    const outs = A.MidiPorts.list(midi.access.outputs);
-    const clockOut = A.MidiPorts.pick(outs, state.clockPort);
-    if (clockOut !== midi.clock && midi.clock && player.playing) { try { midi.clock.send([0xFC]); } catch (e) { /* port gone */ } }
-    midi.clock = clockOut;
-    player.sendClock = clockOut ? (data, time) => { if (paced()) { outbox.push(clockOut, data, time); return; } try { clockOut.send(data, time); } catch (e) { /* port gone */ } } : null;
-    fillPortMenu($('clock-port'), outs, clockOut);
     if (input) setConn('Connected', 'on');
     else setConn(ins.length ? 'No keyboard' : 'No MIDI inputs', 'off');
     setStatus(input ? input.name : '');
@@ -525,12 +518,6 @@
     const outs = midi.access ? A.MidiPorts.list(midi.access.outputs) : [];
     const p = chosen(outs, ev.target.value);
     state.outPort = p ? A.MidiPorts.ref(outs, p) : { none: true };
-    save(); connect();
-  });
-  $('clock-port').addEventListener('change', (ev) => {
-    const outs = midi.access ? A.MidiPorts.list(midi.access.outputs) : [];
-    const p = chosen(outs, ev.target.value);
-    state.clockPort = p ? A.MidiPorts.ref(outs, p) : { none: true };
     save(); connect();
   });
   $('chord-start').addEventListener('change', (ev) => { state.chordStart = ev.target.checked; save(); });
