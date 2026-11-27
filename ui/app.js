@@ -41,7 +41,8 @@
     partsOpen: !!saved.partsOpen,                // the PARTS table shown (the bar opens / closes it)
     showFolders: saved.showFolders == null ? true : !!saved.showFolders,   // LAYOUT › SHOW FOLDERS: the list grouped by folder
     playInBackground: !!saved.playInBackground,  // OUTPUT › PLAY IN BACKGROUND: don't stop when the page is hidden
-    defaultsAdded: !!saved.defaultsAdded,        // the built-in styles (defaults/) were offered once; never again
+    defaultsAdded: !!saved.defaultsAdded,        // the built-in styles (defaults/) were offered (older versions: once)
+    defaultsVersion: saved.defaultsVersion || 0, // the newest built-in styles offered ("since" in defaults/library.json)
   };
   function save() {
     try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* private mode, full storage */ }
@@ -1206,19 +1207,29 @@
     renderStorage();
   }
 
-  // The first start (an empty library): the built-in styles, starred. Only once: deleting them all later doesn't bring
-  // them back, and a library that already has styles is left as it is. If they can't be fetched, next start tries again.
+  // The built-in styles (defaults/library.json), starred. Each has a version ("since", 1 when missing): a start adds
+  // those newer than the newest this browser was offered, so a style added to defaults/ later reaches everyone once,
+  // and one deleted on purpose doesn't come back. The first start adds all of them, unless the library already has
+  // styles (then none, as before). If they can't be fetched, the next start tries again.
   async function addDefaults() {
-    if (state.defaultsAdded) return;
-    if (!library.size) {
-      try {
-        const manifest = JSON.parse(new TextDecoder().decode(await fetchDefault(A.LibraryBackup.MANIFEST)));
-        await A.LibraryBackup.restoreFolder(library, manifest, fetchDefault);
-      } catch (e) {
+    // Before versions there was only defaultsAdded: the first set (version 1) was offered.
+    const had = state.defaultsVersion || (state.defaultsAdded ? 1 : 0);
+    let manifest;
+    try { manifest = JSON.parse(new TextDecoder().decode(await fetchDefault(A.LibraryBackup.MANIFEST))); } catch (e) {
+      if (!had && !library.size) showMessages(`<div class="warn">The built-in styles couldn't be loaded (${esc(e && e.message ? e.message : String(e))}). The page tries again next time.</div>`);
+      return;
+    }
+    const since = (m) => Number(m.since) || 1;
+    const latest = Math.max.apply(null, [1].concat(manifest.styles.map(since)));
+    if (had >= latest) return;
+    if (had || !library.size) {
+      const styles = manifest.styles.filter((m) => since(m) > had);
+      try { await A.LibraryBackup.restoreFolder(library, Object.assign({}, manifest, { styles }), fetchDefault); } catch (e) {
         showMessages(`<div class="warn">The built-in styles couldn't be loaded (${esc(e && e.message ? e.message : String(e))}). The page tries again next time.</div>`);
         return;
       }
     }
+    state.defaultsVersion = latest;
     state.defaultsAdded = true;
     save();
   }
