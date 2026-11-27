@@ -469,6 +469,14 @@ label.btn.icon { cursor: pointer; }
   #style-parts { padding: 8px 12px; }
   .parts-bar-sum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .info-row:empty, .msgs:empty { display: none; }
+  /* Tempo and VOL share one line (a phone is about 350 px inside the box): narrower buttons and numbers. The trash
+     can stays on the name's line above. A narrower screen still wraps them. */
+  .style-pills { justify-content: space-between; gap: 6px; margin-top: 8px; }   /* clear of the trash can above VOL */
+  .tempo.pill { padding: 2px; gap: 2px; }
+  .tempo.pill .btn { width: 32px; }
+  .tempo.pill .btn.tap { padding: 0 8px; font-size: 13px; }
+  .tempo.pill .tempo-val { font-size: 18px; min-width: 38px; }
+  .tempo.pill .vol-label { font-size: 11px; padding-left: 8px; }
 }
 label.btn { cursor: pointer; }
 
