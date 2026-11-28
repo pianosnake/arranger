@@ -29,7 +29,7 @@
   <link rel="prefetch" href="defaults/styles/WORLD/Wien%20Waltz.STL?v=1" data-file="styles/WORLD/Wien Waltz.STL">
   <link rel="prefetch" href="defaults/styles/WORLD/LAMBADA.STL?v=1" data-file="styles/WORLD/LAMBADA.STL">
   <link rel="prefetch" href="defaults/styles/WORLD/BowIvry.STY?v=1" data-file="styles/WORLD/BowIvry.STY">
-  <link rel="stylesheet" href="ui/style.css?v=138">
+  <link rel="stylesheet" href="ui/style.css?v=140">
 </head>
 <body>
   <aside class="side">
@@ -66,15 +66,18 @@
         <button id="lib-fav" class="star fav-only" type="button" aria-pressed="false" title="Show only the favorites">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.3L12 17.1l-5.7 3.1 1.2-6.3-4.7-4.4 6.4-.8z"/></svg>
         </button>
-      </div>
-      <!-- BROWSE BY: the list grouped by folder, tag, meter, tempo or main variations, or one list A to Z. -->
-      <div class="lib-browse" id="lib-browse" role="group" aria-label="Browse by">
-        <button class="btn" type="button" data-browse="folder" aria-pressed="true" title="Grouped by the folder each style was imported from">FOLDER</button>
-        <button class="btn" type="button" data-browse="tag" aria-pressed="false" title="Grouped by tag: a style shows under each of its tags (✎ by a style's name tags it)">TAG</button>
-        <button class="btn" type="button" data-browse="meter" aria-pressed="false" title="Grouped by time signature">METER</button>
-        <button class="btn" type="button" data-browse="bpm" aria-pressed="false" title="Grouped by tempo, in steps of 20 BPM">BPM</button>
-        <button class="btn" type="button" data-browse="mains" aria-pressed="false" title="Grouped by how many main variations (Main A–D) a style has">MAINS</button>
-        <button class="btn" type="button" data-browse="none" aria-pressed="false" title="A to Z, under a header for each letter">A–Z</button>
+        <!-- Sort: lines growing from top to bottom; the select over it opens the system's own picker (iPad too). -->
+        <label class="sort" id="lib-sort" title="Sort the styles">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h5M4 10h9M4 14h13M4 18h17"/></svg>
+          <select id="lib-browse" aria-label="Sort the styles">
+            <option value="none">A–Z</option>
+            <option value="folder">Folder</option>
+            <option value="tag">Tag</option>
+            <option value="meter">Meter</option>
+            <option value="bpm">BPM</option>
+            <option value="mains">Mains</option>
+          </select>
+        </label>
       </div>
       <div class="list" id="lib-list" tabindex="0"></div>
       <div class="lib-count" id="lib-count"></div>
@@ -263,6 +266,6 @@
   <script src="synth/sf-synth.js?v=25"></script>
   <script src="play/controls.js?v=76"></script>
   <script src="play/outbox.js?v=5"></script>
-  <script src="ui/app.js?v=184"></script>
+  <script src="ui/app.js?v=185"></script>
 </body>
 </html>

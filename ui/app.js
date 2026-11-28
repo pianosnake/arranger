@@ -38,7 +38,7 @@
     controls: saved.controls || {},              // Controls.toJSON(): action -> { port, channel, type, number }
     collapsed: saved.collapsed || {},            // style list: group -> collapsed (a folder's name, or 'tag:disco', 'bpm:80', …)
     partsOpen: !!saved.partsOpen,                // the PARTS table shown (the bar opens / closes it)
-    // BROWSE BY: the style list grouped by folder, tag, meter, bpm or main variations, or 'none' (A to Z). Older versions had
+    // SORT (the lines by the star): the style list grouped by folder, tag, meter, bpm or main variations, or 'none' (A to Z). Older versions had
     // LAYOUT › SHOW FOLDERS: off there is A to Z here.
     browse: saved.browse === 'genre' ? 'tag' : ['folder', 'tag', 'meter', 'bpm', 'mains', 'none'].indexOf(saved.browse) >= 0 ? saved.browse
       : saved.showFolders === false ? 'none' : 'folder',
@@ -527,10 +527,9 @@
     state.playInBackground = ev.target.checked; save(); renderMemory(); setAhead();
     if (state.playInBackground) startPacer(); else stopPacer();
   });
-  $('lib-browse').addEventListener('click', (ev) => {
-    const b = ev.target.closest('[data-browse]');
-    if (!b) return;
-    state.browse = b.getAttribute('data-browse'); view.openGroup = current ? groupOf(current.entry) : null;
+  // Sort (the lines by the star): A–Z, or grouped by folder, tag, meter, BPM or mains.
+  $('lib-browse').addEventListener('change', (ev) => {
+    state.browse = ev.target.value; view.openGroup = current ? groupOf(current.entry) : null;
     save(); renderLibrary(); showCurrentRow();
   });
   $('chord-memory').addEventListener('change', (ev) => {
@@ -553,7 +552,7 @@
   let library = null;
   let current = null;                 // { entry, style } of the loaded style
 
-  // BROWSE BY above the list: the styles grouped by folder (the one they were imported from), tag, meter or tempo,
+  // SORT (the lines by the star): the styles grouped by folder (the one they were imported from), tag, meter or tempo,
   // each group under a sticky header that collapses it (saved), or A to Z under letter headers. Within a group, A to Z by name
   // (by tempo in BPM). By tag, a style is in the group of each of its tags (Untagged: none). view.openGroup: a group
   // kept open just for now (the style loaded after an import or a reload).
@@ -571,7 +570,7 @@
     return c && c.toLowerCase() !== c ? c : '#';
   }
   const groupOf = (e) => (BROWSE[state.browse] ? BROWSE[state.browse].key(e) : '');
-  // Folder headers keep their plain names as keys (as before BROWSE BY); the others are kept apart by a prefix.
+  // Folder headers keep their plain names as keys (as before SORT); the others are kept apart by a prefix.
   const shutKey = (k) => (state.browse === 'folder' ? k : state.browse + ':' + k);
   function sortGroups(keys) {
     if (state.browse === 'bpm' || state.browse === 'mains') return keys.sort((a, b) => Number(a) - Number(b));
@@ -588,8 +587,8 @@
 
   function renderLibrary() {
     if (!library) return;
-    Array.from(document.querySelectorAll('#lib-browse [data-browse]')).forEach((b) =>
-      b.setAttribute('aria-pressed', String(b.getAttribute('data-browse') === state.browse)));
+    $('lib-browse').value = state.browse;
+    $('lib-sort').title = 'Sorted by ' + $('lib-browse').options[$('lib-browse').selectedIndex].text;
     $('lib-fav').setAttribute('aria-pressed', String(view.favorites));
     const rows = library.list({ search: view.search, favorites: view.favorites, });
     // Each row: the name, then its tags · meter · tempo · folder (less what the list is grouped by) · Yamaha / Roland.
