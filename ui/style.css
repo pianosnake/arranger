@@ -92,11 +92,6 @@ body {
 
 /* ---------- style library ---------- */
 .lib-tools { display: flex; gap: 6px; align-items: center; }
-.funnel { position: relative; display: flex; align-items: center; gap: 2px; padding: 2px; color: var(--text-dim); cursor: pointer; line-height: 0; }
-.funnel svg path { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
-.funnel[aria-pressed="true"] { color: #f5d742; }                    /* yellow: a time signature is picked */
-.funnel[aria-pressed="true"] svg path { fill: currentColor; }
-.funnel select { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; -webkit-appearance: none; appearance: none; }
 .search { display: flex; align-items: center; gap: 4px; position: relative; }
 .search input {
   flex: 1; min-width: 0; background: var(--lcd); color: var(--text); border: 1px solid var(--border); border-radius: 0;
@@ -124,7 +119,7 @@ body {
 .row.on .row-name { color: var(--accent-soft); }
 .row .row-main { flex: 1; min-width: 0; }
 .row .row-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row .row-star { width: .75em; height: .75em; fill: #f5d742; margin-right: 4px; vertical-align: -1px; }   /* a favourite: yellow, as the funnel */
+.row .row-star { width: .75em; height: .75em; fill: #f5d742; margin-right: 4px; vertical-align: -1px; }   /* a favourite: yellow */
 .row .row-sub { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .lib-count { font-size: 11px; color: var(--text-dim); }
@@ -182,6 +177,10 @@ body {
 .part-row .check { justify-self: center; }
 .part-row.part-head > span:nth-child(3), .part-row.part-head > span:nth-child(4) { text-align: center; }
 .part-row .part-voice { flex: 1; min-width: 0; font: 11px var(--lcd-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.part-row .part-sound { min-width: 0; display: flex; }
+/* SOUND: the style's own (dim) or a channel override (lit). */
+.part-row select[data-sound] { width: 100%; min-width: 0; text-align: left; text-overflow: ellipsis; color: var(--text-dim); -webkit-text-fill-color: var(--text-dim); font-size: 13px; }
+.part-row select[data-sound].override { color: var(--lcd-text); -webkit-text-fill-color: var(--lcd-text); border-color: var(--accent); }
 .part-row select {
   -webkit-appearance: none; appearance: none; border-radius: 0; margin: 0; cursor: pointer; width: 48px; text-align: center;
   background: var(--lcd); color: var(--lcd-text); -webkit-text-fill-color: var(--lcd-text); border: 1px solid var(--border);
@@ -260,8 +259,8 @@ body {
 .lib-tools .btn.icon { width: 48px; height: 48px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
 .lib-tools .btn.icon svg { width: 22px; height: 22px; }
 .search-box input { height: 48px; font-size: 17px; border-radius: 8px; padding-left: 12px; }
-.search .star, .funnel { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
-.search .star svg, .funnel svg { width: 24px; height: 24px; }
+.search .star { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+.search .star svg { width: 24px; height: 24px; }
 .folder { font-size: 12px; line-height: 34px; }
 .row { padding: 9px 10px; }
 .row .row-name { font-size: 18px; }
@@ -349,11 +348,11 @@ label.btn.icon { cursor: pointer; }
 }
 .parts-bar-title { white-space: nowrap; flex: none; }
 /* ✕ closes the settings: the same size as the gear that opens them (48 px, 36 px narrow), drawn, not a character. */
-.settings-head-btns #settings-close { width: 48px; height: 48px; border-radius: 8px; }
-#settings-close svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.settings-head-btns #settings-close, .settings-head-btns #info-close { width: 48px; height: 48px; border-radius: 8px; }
+#settings-close svg, #info-close svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
 @media (max-width: 640px) {
-  .settings-head-btns #settings-close { width: 36px; height: 36px; }
-  #settings-close svg { width: 18px; height: 18px; }
+  .settings-head-btns #settings-close, .settings-head-btns #info-close { width: 36px; height: 36px; }
+  #settings-close svg, #info-close svg { width: 18px; height: 18px; }
 }
 .settings-title-wrap { display: flex; align-items: center; gap: 12px; }
 .settings-title-wrap #midi-refresh { width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; }
@@ -432,9 +431,12 @@ label.btn.icon { cursor: pointer; }
   .lib-tools .btn.icon svg { width: 18px; height: 18px; }
   .search { flex: 1; min-width: 0; }
   .search-box input { height: 36px; font-size: 15px; }
-  .search .star, .funnel { width: 36px; height: 36px; }
-  .search .star svg, .funnel svg { width: 20px; height: 20px; }
-  .list { flex: none; width: 100%; height: 160px; max-height: none; }   /* about 5 styles */
+  .search .star { width: 36px; height: 36px; }
+  .search .star svg { width: 20px; height: 20px; }
+  .list { flex: none; width: 100%; height: 124px; max-height: none; }   /* about 4 styles: BROWSE BY took the 5th row's room */
+  /* BROWSE BY on one line (there's room). */
+  .side-pane > .lib-browse { flex: none; width: 100%; grid-template-columns: repeat(6, 1fr); }
+  .side-pane > .lib-browse .btn { min-height: 30px; font-size: 10px; }
   .folder { line-height: 28px; }
   .row { padding: 5px 10px; }
   .row .row-name { font-size: 15px; }
@@ -506,8 +508,13 @@ label.btn { cursor: pointer; }
 @media (min-width: 641px) and (max-height: 500px) {
   .side { width: 260px; padding: 6px 6px 4px; gap: 6px; }
   /* + and the folder button on the search's line: the pane is a grid, the list below takes the rest. */
-  #pane-styles { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; gap: 6px; }
-  #pane-styles > .list, #pane-styles > .lib-count { grid-column: 1 / -1; }
+  /* Rows: + and the search, BROWSE BY, the list (the rest), the count. */
+  #pane-styles { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 6px; }
+  #pane-styles > .list, #pane-styles > .lib-count, #pane-styles > .lib-browse { grid-column: 1 / -1; }
+  #pane-styles > .lib-browse { grid-row: 2; }
+  #pane-styles > .list { grid-row: 3; }
+  #pane-styles > .lib-count { grid-row: 4; }
+  .lib-browse .btn { min-height: 28px; font-size: 10px; }
   .logo img { height: 30px; }
   .brand .side-gear { width: 36px; height: 36px; }
   .brand .side-gear svg { width: 18px; height: 18px; }
@@ -516,8 +523,8 @@ label.btn { cursor: pointer; }
   .lib-tools .btn.icon { width: 34px; height: 36px; flex: none; }
   .lib-tools .btn.icon svg { width: 18px; height: 18px; }
   .search-box input { height: 36px; font-size: 15px; }
-  .search .star, .funnel { width: 28px; height: 36px; flex: none; }
-  .search .star svg, .funnel svg { width: 20px; height: 20px; }
+  .search .star { width: 28px; height: 36px; flex: none; }
+  .search .star svg { width: 20px; height: 20px; }
   .row { padding: 6px 8px; }
   .row .row-name { font-size: 15px; }
   .row .row-sub { font-size: 11px; margin-top: 0; }
@@ -574,3 +581,32 @@ label.btn { cursor: pointer; }
 #pane-settings .ctl-what { font-size: 13px; }
 #pane-settings .ctl-row .btn { font-size: 12px; }
 #pane-settings .ctl-row select { font-size: 13px; }
+
+/* ✎ by the style's name, and its window: NAME, TAGS (every tag a button, lit when the style has it), SAVE. */
+.style-edit { flex: none; background: none; border: 0; cursor: pointer; padding: 4px; color: var(--text-dim); line-height: 0; }
+.style-edit svg path { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.style-edit:active { color: var(--accent); }
+.modal-panel.info-panel { max-width: 480px; display: flex; flex-direction: column; gap: 10px; }
+.info-field { font-size: 12px; }
+.info-field input {
+  flex: 1; min-width: 0; margin-left: auto; background: var(--lcd); color: var(--lcd-text); -webkit-text-fill-color: var(--lcd-text);
+  border: 1px solid var(--border); border-radius: 0; font: 17px var(--ui-font); padding: 8px 10px; -webkit-appearance: none; appearance: none;
+  -webkit-user-select: text; user-select: text;
+}
+.info-field input::placeholder { color: var(--text-dim); -webkit-text-fill-color: var(--text-dim); }
+.info-panel .note { font-size: 13px; margin-top: -4px; }
+/* Tag buttons: in STYLE INFO and in the filter. */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips .btn { min-height: 36px; padding: 4px 12px; font-size: 13px; font-weight: 600; letter-spacing: 0; border-radius: 18px; }
+.info-field .btn { flex: none; min-height: 38px; }
+.info-folder-tags { align-self: flex-start; min-height: 36px; font-size: 12px; }
+.info-btns { display: flex; justify-content: flex-end; }
+.info-btns .btn { min-height: 44px; min-width: 110px; font-size: 14px; }
+.info-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 4px 0 0; padding-top: 10px; border-top: 1px solid var(--border); }
+.info-facts dt { font: 700 12px var(--ui-font); color: var(--text-dim); letter-spacing: .5px; }
+.info-facts dd { margin: 0; font: 14px var(--ui-font); color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* BROWSE BY, under the search: six buttons in two rows of three (one row of six doesn't fit FOLDER, even on the iPad). */
+.lib-browse { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.lib-browse .btn { min-width: 0; min-height: 30px; padding: 0 2px; font-size: 11px; letter-spacing: .3px; border-radius: 6px; }
+

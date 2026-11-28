@@ -29,7 +29,7 @@
   <link rel="prefetch" href="defaults/styles/WORLD/Wien%20Waltz.STL?v=1" data-file="styles/WORLD/Wien Waltz.STL">
   <link rel="prefetch" href="defaults/styles/WORLD/LAMBADA.STL?v=1" data-file="styles/WORLD/LAMBADA.STL">
   <link rel="prefetch" href="defaults/styles/WORLD/BowIvry.STY?v=1" data-file="styles/WORLD/BowIvry.STY">
-  <link rel="stylesheet" href="ui/style.css?v=127">
+  <link rel="stylesheet" href="ui/style.css?v=138">
 </head>
 <body>
   <aside class="side">
@@ -66,11 +66,15 @@
         <button id="lib-fav" class="star fav-only" type="button" aria-pressed="false" title="Show only the favorites">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.3L12 17.1l-5.7 3.1 1.2-6.3-4.7-4.4 6.4-.8z"/></svg>
         </button>
-        <!-- The time-signature filter: a funnel; the select over it opens the system's own picker (iPad too). -->
-        <label class="funnel" id="lib-funnel" title="Show only one time signature" aria-pressed="false">
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 4h18l-7 8.2V19l-4 2v-8.8z"/></svg>
-          <select id="lib-meter" aria-label="Time signature filter"><option value="">All time signatures</option></select>
-        </label>
+      </div>
+      <!-- BROWSE BY: the list grouped by folder, tag, meter, tempo or main variations, or one list A to Z. -->
+      <div class="lib-browse" id="lib-browse" role="group" aria-label="Browse by">
+        <button class="btn" type="button" data-browse="folder" aria-pressed="true" title="Grouped by the folder each style was imported from">FOLDER</button>
+        <button class="btn" type="button" data-browse="tag" aria-pressed="false" title="Grouped by tag: a style shows under each of its tags (✎ by a style's name tags it)">TAG</button>
+        <button class="btn" type="button" data-browse="meter" aria-pressed="false" title="Grouped by time signature">METER</button>
+        <button class="btn" type="button" data-browse="bpm" aria-pressed="false" title="Grouped by tempo, in steps of 20 BPM">BPM</button>
+        <button class="btn" type="button" data-browse="mains" aria-pressed="false" title="Grouped by how many main variations (Main A–D) a style has">MAINS</button>
+        <button class="btn" type="button" data-browse="none" aria-pressed="false" title="A to Z, under a header for each letter">A–Z</button>
       </div>
       <div class="list" id="lib-list" tabindex="0"></div>
       <div class="lib-count" id="lib-count"></div>
@@ -94,6 +98,9 @@
             <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.3L12 17.1l-5.7 3.1 1.2-6.3-4.7-4.4 6.4-.8z"/></svg>
           </button>
           <span class="style-name" id="style-name">No style loaded</span>
+          <button id="style-edit" class="style-edit" type="button" aria-label="Style info: rename it, tag it" title="Style info: rename it, tag it" hidden>
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/></svg>
+          </button>
         </div>
         <div class="style-sum" id="style-sum">Add styles with + (files) or the folder button, then tap one.</div>
         <div class="style-pills">
@@ -129,6 +136,30 @@
       <div class="msgs" id="msgs"></div>
     </section>
   </main>
+
+  <!-- A style's name and tags (✎ by its name): kept by its music hash, the file isn't changed. -->
+  <div class="modal" id="info-modal" hidden>
+    <div class="modal-panel info-panel" id="pane-info" role="dialog" aria-modal="true" aria-labelledby="info-title">
+      <div class="settings-head"><span id="info-title">STYLE INFO</span>
+        <span class="settings-head-btns">
+          <button id="info-close" class="btn ed-nav" type="button" aria-label="Close without saving"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/></svg></button>
+        </span>
+      </div>
+      <label class="field info-field">NAME
+        <input id="info-name" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
+      </label>
+      <div class="note">Leave NAME empty to use the file's own name.</div>
+      <label class="field info-field">TAGS
+        <input id="info-tag" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="New tag: disco, Russian, E80…">
+        <button id="info-add" class="btn" type="button">ADD</button>
+      </label>
+      <div class="chips" id="info-tags"></div>
+      <button id="info-folder-tags" class="btn info-folder-tags" type="button" hidden></button>
+      <!-- From the file and the library: shown, not edited here (the tempo is set with + / − and kept per style). -->
+      <dl class="info-facts" id="info-facts"></dl>
+      <div class="info-btns"><button id="info-save" class="btn on" type="button">SAVE</button></div>
+    </div>
+  </div>
 
   <!-- Settings: a window over the whole page (✕, Escape or a tap outside closes it). -->
   <div class="modal" id="settings-modal" hidden>
@@ -202,12 +233,6 @@
         <button id="lib-clear-all" class="btn danger" type="button" title="Remove every style from the library on this device. Save a backup first if you want to keep a copy.">CLEAR ALL</button>
           </div>
         </section>
-        <section class="set-group">
-          <div class="group-title">LAYOUT</div>
-          <label class="check" title="Group the style list by folder, each under a header that opens and closes it. Off: one list of every style, A to Z.">
-            <input id="show-folders" type="checkbox" checked> SHOW FOLDERS
-          </label>
-        </section>
         <section class="set-group wide">
           <div class="group-title">CONTROLS</div>
           <div class="note">Play the buttons from a foot switch, pads or a controller: tap LEARN, then press the switch (a CC, note or program change).</div>
@@ -226,18 +251,18 @@
   <script src="library/sty-reader.js?v=24"></script>
   <script src="library/stl-reader.js?v=62"></script>
   <script src="library/style-files.js?v=21"></script>
-  <script src="library/style-library.js?v=46"></script>
+  <script src="library/style-library.js?v=50"></script>
   <script src="library/zip.js?v=9"></script>
   <script src="library/library-backup.js?v=49"></script>
   <script src="play/meter.js?v=4"></script>
   <script src="play/transposer.js?v=3"></script>
   <script src="play/section-flow.js?v=101"></script>
   <script src="play/gm-names.js?v=57"></script>
-  <script src="play/channel-map.js?v=66"></script>
-  <script src="play/player.js?v=107"></script>
+  <script src="play/channel-map.js?v=68"></script>
+  <script src="play/player.js?v=110"></script>
   <script src="synth/sf-synth.js?v=25"></script>
   <script src="play/controls.js?v=76"></script>
   <script src="play/outbox.js?v=5"></script>
-  <script src="ui/app.js?v=173"></script>
+  <script src="ui/app.js?v=184"></script>
 </body>
 </html>

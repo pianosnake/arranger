@@ -7,8 +7,19 @@
 //                                     sameMusicAs: an entry with the same music hash (added anyway, settings shared).
 //   await addMany(files, onProgress)  files: [{ name, folder, bytes() -> Promise<Uint8Array> }]
 //                                     -> { added: [entry], duplicates: [name], sameMusic: [name], failed: [{ name, error }] }
-//   list({ search, favorites, meter }) entries sorted by name
+//   list({ search, favorites, tags, untagged, meter, mains }) entries sorted by title. tags: styles with every one of
+//                                     these (any case); untagged: only styles without tags; meter: e.g. '3/4' ('' for
+//                                     all); mains: how many main variations (0 or none for all).
+//   allTags()                         the tags given to styles, A to Z, e.g. ['dance', 'Disco', 'E80']
 //   meters()                          the meters in the library, e.g. ['3/4', '4/4', '7/8']
+//   mains(entry), mainCounts()        how many main variations a style has (Main A..D); the counts in the library
+//   title(entry), tags(entry)         the name shown (the user's, else the file's) and the user's tags ([] if none)
+//   bpm(entry)                        the tempo it plays at: the one saved for it, else the file's
+//   await setInfo(id, { title, tags }) the user's name and tags, kept in the settings by music hash (the file isn't
+//                                     changed): '' or the file's own name drops the title, [] drops the tags
+//   await addTags(ids, tags)          adds tags to many styles at once (e.g. a whole folder), one save
+// Tags: any words (a genre, a country, the keyboard a style came from). A tag typed in another case than one already
+// used takes that one's case, so 'disco' and 'Disco' stay one tag. An older 'genre' setting reads as the first tag.
 //   totalBytes()                      the size of all the style files kept
 //   await load(id) -> { entry, style }
 //   await remove(id), setFavorite(id, on), setSettings(id, settings)
@@ -43,6 +54,11 @@
   }
   const norm = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[._~-]+/g, ' ').replace(/\s+/g, ' ').trim();
   const copy = (e) => JSON.parse(JSON.stringify(e));
+  const titleOf = (e) => (e.settings && e.settings.title) || e.name;
+  const tagsOf = (e) => (e.settings && Array.isArray(e.settings.tags) ? e.settings.tags : e.settings && e.settings.genre ? [e.settings.genre] : []);
+  const cleanTag = (t) => String(t == null ? '' : t).replace(/\s+/g, ' ').trim();
+  const bpmOf = (e) => Math.round((e.settings && e.settings.tempo) || e.tempo);
+  const mainsOf = (e) => (e.sections || []).filter((id) => /^main/.test(id)).length;
 
   class StyleLibrary {
     constructor(backend, read) {
@@ -100,13 +116,41 @@
       const words = f.search ? norm(f.search).split(' ') : [];
       return Object.keys(this.entries).map((id) => this.entries[id])
         .filter((e) => !f.favorites || e.favorite)
+        .filter((e) => !f.untagged || !tagsOf(e).length)
+        .filter((e) => {
+          if (!f.tags || !f.tags.length) return true;
+          const have = tagsOf(e).map((t) => t.toLowerCase());
+          return f.tags.every((t) => have.indexOf(String(t).toLowerCase()) >= 0);
+        })
         .filter((e) => !f.meter || e.meter === f.meter)
+        .filter((e) => !f.mains || mainsOf(e) === f.mains)
         .filter((e) => {
           if (!words.length) return true;
-          const hay = norm(`${e.name} ${e.fileName} ${e.folder} ${e.meter} ${e.source}`);
+          const hay = norm(`${titleOf(e)} ${e.name} ${tagsOf(e).join(' ')} ${e.fileName} ${e.folder} ${e.meter} ${e.source}`);
           return words.every((w) => hay.indexOf(w) >= 0);
         })
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.id.localeCompare(b.id));
+        .sort((a, b) => titleOf(a).localeCompare(titleOf(b), undefined, { sensitivity: 'base' }) || a.id.localeCompare(b.id));
+    }
+    allTags() {
+      const set = {};
+      Object.keys(this.entries).forEach((id) => tagsOf(this.entries[id]).forEach((t) => { if (!set[t.toLowerCase()]) set[t.toLowerCase()] = t; }));
+      return Object.keys(set).map((k) => set[k]).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
+    }
+    // Tags cleaned up, without repeats, in the case already used by other styles (not those in `except`).
+    fixTags(tags, except) {
+      const used = {};
+      Object.keys(this.entries).forEach((id) => {
+        if (except && except(this.entries[id])) return;
+        tagsOf(this.entries[id]).forEach((t) => { if (!used[t.toLowerCase()]) used[t.toLowerCase()] = t; });
+      });
+      const out = [], seen = {};
+      (tags || []).map(cleanTag).filter(Boolean).forEach((t) => {
+        const k = t.toLowerCase();
+        if (seen[k]) return;
+        seen[k] = true;
+        out.push(used[k] || t);
+      });
+      return out;
     }
     meters() {
       const set = {};
@@ -115,6 +159,52 @@
         const [an, ad] = a.split('/').map(Number), [bn, bd] = b.split('/').map(Number);
         return ad - bd || an - bn;
       });
+    }
+    mainCounts() {
+      const set = {};
+      Object.keys(this.entries).forEach((id) => { set[mainsOf(this.entries[id])] = true; });
+      return Object.keys(set).map(Number).sort((a, b) => a - b);
+    }
+    mains(e) { return mainsOf(e); }
+    title(e) { return titleOf(e); }
+    tags(e) { return tagsOf(e).slice(); }
+    bpm(e) { return bpmOf(e); }
+    // The user's name and tags for a style: part of its settings, so every copy (same music hash) shares them and a
+    // style imported again gets them back.
+    async setInfo(id, info) {
+      const e = this.entries[id];
+      if (!e) return null;
+      const s = copy(e.settings || {});
+      const title = cleanTag(info.title);
+      const tags = this.fixTags(info.tags, (x) => x.id === id || (e.hash && x.hash === e.hash));
+      if (title && title !== e.name) s.title = title; else delete s.title;
+      delete s.genre;
+      if (tags.length) s.tags = tags; else delete s.tags;
+      return this.setSettings(id, s);
+    }
+    // The same tags added to many styles (and their copies), with one save of the table by hash at the end.
+    async addTags(ids, tags) {
+      const add = this.fixTags(tags);
+      if (!add.length) return 0;
+      const done = {};
+      let changed = 0;
+      for (const id of ids) {
+        const e = this.entries[id];
+        if (!e || done[id]) continue;
+        const group = [e].concat(this.sameHash(e.hash, id));
+        group.forEach((x) => { done[x.id] = true; });
+        const s = copy(e.settings || {});
+        const had = tagsOf(e), lower = had.map((t) => t.toLowerCase());
+        const more = add.filter((t) => lower.indexOf(t.toLowerCase()) < 0);
+        if (!more.length) continue;
+        s.tags = had.concat(more);
+        delete s.genre;
+        for (const x of group) { x.settings = copy(s); await this.backend.update(x); }
+        if (e.hash) this.byHash[e.hash] = s;
+        changed++;
+      }
+      if (changed) await this.saveByHash();
+      return changed;
     }
 
     async load(id) {

@@ -36,9 +36,12 @@
     autoFill: saved.autoFill == null ? true : !!saved.autoFill,
     chordStart: !!saved.chordStart,              // a chord played while stopped starts the style
     controls: saved.controls || {},              // Controls.toJSON(): action -> { port, channel, type, number }
-    collapsed: saved.collapsed || {},            // style list: folder name -> collapsed
+    collapsed: saved.collapsed || {},            // style list: group -> collapsed (a folder's name, or 'tag:disco', 'bpm:80', …)
     partsOpen: !!saved.partsOpen,                // the PARTS table shown (the bar opens / closes it)
-    showFolders: saved.showFolders == null ? true : !!saved.showFolders,   // LAYOUT › SHOW FOLDERS: the list grouped by folder
+    // BROWSE BY: the style list grouped by folder, tag, meter, bpm or main variations, or 'none' (A to Z). Older versions had
+    // LAYOUT › SHOW FOLDERS: off there is A to Z here.
+    browse: saved.browse === 'genre' ? 'tag' : ['folder', 'tag', 'meter', 'bpm', 'mains', 'none'].indexOf(saved.browse) >= 0 ? saved.browse
+      : saved.showFolders === false ? 'none' : 'folder',
     playInBackground: !!saved.playInBackground,  // OUTPUT › PLAY IN BACKGROUND: don't stop when the page is hidden
     defaultsAdded: !!saved.defaultsAdded,        // the built-in styles (defaults/) were offered (older versions: once)
     defaultsVersion: saved.defaultsVersion || 0, // the newest built-in styles offered ("since" in defaults/library.json)
@@ -389,7 +392,7 @@
     const merged = JSON.parse(JSON.stringify(state.channelMap));
     const own = (set && set.parts) || {};
     Object.keys(own).forEach((pid) => { merged[pid] = Object.assign({}, merged[pid] || {}, own[pid]); });
-    return new A.ChannelMap(merged);
+    return new A.ChannelMap(merged, set && set.sounds);
   };
   let channelMap = styleMapFor(null);
   const player = new A.StylePlayer({
@@ -481,7 +484,6 @@
   function renderMemory() {
     $('chord-memory').checked = state.memory;
     $('chord-start').checked = state.chordStart;
-    $('show-folders').checked = state.showFolders;
     $('play-bg').checked = state.playInBackground;
     $('play-bg-note').hidden = !state.playInBackground;
   }
@@ -525,7 +527,12 @@
     state.playInBackground = ev.target.checked; save(); renderMemory(); setAhead();
     if (state.playInBackground) startPacer(); else stopPacer();
   });
-  $('show-folders').addEventListener('change', (ev) => { state.showFolders = ev.target.checked; save(); renderLibrary(); showCurrentRow(); });
+  $('lib-browse').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-browse]');
+    if (!b) return;
+    state.browse = b.getAttribute('data-browse'); view.openGroup = current ? groupOf(current.entry) : null;
+    save(); renderLibrary(); showCurrentRow();
+  });
   $('chord-memory').addEventListener('change', (ev) => {
     state.memory = ev.target.checked; detector.setMemory(state.memory);
     save();
@@ -542,47 +549,73 @@
   // The open / closed triangle of a folder header and the PARTS bar: points right, turned down (CSS) when open.
   const TRI_SVG = '<svg class="tri" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.2 8.4 5 3 8.8z"/></svg>';
   const ROW_STAR = '<svg class="row-star" viewBox="0 0 24 24" width="11" height="11" aria-label="favorite"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.3L12 17.1l-5.7 3.1 1.2-6.3-4.7-4.4 6.4-.8z"/></svg>';
-  const view = { search: '', favorites: false, meter: '', confirmDelete: null, importing: false };
+  const view = { search: '', favorites: false, openGroup: null, confirmDelete: null, importing: false };
   let library = null;
   let current = null;                 // { entry, style } of the loaded style
 
+  // BROWSE BY above the list: the styles grouped by folder (the one they were imported from), tag, meter or tempo,
+  // each group under a sticky header that collapses it (saved), or A to Z under letter headers. Within a group, A to Z by name
+  // (by tempo in BPM). By tag, a style is in the group of each of its tags (Untagged: none). view.openGroup: a group
+  // kept open just for now (the style loaded after an import or a reload).
+  const BROWSE = {
+    folder: { key: (e) => e.folder || '', label: (k) => k || 'Other' },
+    tag: { key: (e) => library.tags(e)[0] || '', keys: (e) => (library.tags(e).length ? library.tags(e) : ['']), label: (k) => k || 'Untagged' },
+    meter: { key: (e) => e.meter, label: (k) => k },
+    bpm: { key: (e) => String(Math.floor(library.bpm(e) / 20) * 20), label: (k) => `${k}–${Number(k) + 19} BPM` },
+    mains: { key: (e) => String(library.mains(e)), label: (k) => `${k} main${k === '1' ? '' : 's'}` },
+    none: { key: (e) => initial(library.title(e)), label: (k) => k },   // A–Z: under each name's first letter
+  };
+  // A name's letter for A–Z: without accents (É under E), upper case; a digit or a sign: '#', first.
+  function initial(name) {
+    const c = String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().charAt(0).toUpperCase();
+    return c && c.toLowerCase() !== c ? c : '#';
+  }
+  const groupOf = (e) => (BROWSE[state.browse] ? BROWSE[state.browse].key(e) : '');
+  // Folder headers keep their plain names as keys (as before BROWSE BY); the others are kept apart by a prefix.
+  const shutKey = (k) => (state.browse === 'folder' ? k : state.browse + ':' + k);
+  function sortGroups(keys) {
+    if (state.browse === 'bpm' || state.browse === 'mains') return keys.sort((a, b) => Number(a) - Number(b));
+    if (state.browse === 'none') return keys.sort((a, b) => (b === '#') - (a === '#') || a.localeCompare(b));
+    if (state.browse === 'meter') {
+      return keys.sort((a, b) => {
+        const [an, ad] = a.split('/').map(Number), [bn, bd] = b.split('/').map(Number);
+        return ad - bd || an - bn;
+      });
+    }
+    return keys.sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
+  }
+  const byTitle = (a, b) => library.title(a).localeCompare(library.title(b), undefined, { sensitivity: 'base', numeric: true });
+
   function renderLibrary() {
     if (!library) return;
-    const meters = library.meters();
-    const sel = $('lib-meter');
-    if (view.meter && meters.indexOf(view.meter) < 0) view.meter = '';
-    sel.innerHTML = '<option value="">All time signatures</option>' + meters.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
-    sel.value = view.meter;
-    $('lib-funnel').setAttribute('aria-pressed', String(!!view.meter));     // yellow while it filters
+    Array.from(document.querySelectorAll('#lib-browse [data-browse]')).forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-browse') === state.browse)));
     $('lib-fav').setAttribute('aria-pressed', String(view.favorites));
-    const rows = library.list({ search: view.search, favorites: view.favorites, meter: view.meter });
+    const rows = library.list({ search: view.search, favorites: view.favorites, });
+    // Each row: the name, then its tags · meter · tempo · folder (less what the list is grouped by) · Yamaha / Roland.
     const rowHtml = (e) => {
       const on = current && current.entry.id === e.id ? ' on' : '';
-      const sub = [e.meter, e.tempo + ' bpm', e.source === 'sty' ? 'Yamaha' : 'Roland'].join(' · ');
+      const sub = [library.tags(e).join(', '), state.browse !== 'meter' && e.meter, library.bpm(e) + ' bpm',
+        state.browse !== 'folder' && e.folder, e.source === 'sty' ? 'Yamaha' : 'Roland'].filter(Boolean).join(' · ');
       return `<div class="row${on}" data-id="${esc(e.id)}">` +
-        `<div class="row-main"><div class="row-name">${e.favorite ? ROW_STAR : ''}${esc(e.name)}</div><div class="row-sub">${esc(sub)}</div></div></div>`;
+        `<div class="row-main"><div class="row-name">${e.favorite ? ROW_STAR : ''}${esc(library.title(e))}</div><div class="row-sub">${esc(sub)}</div></div></div>`;
     };
     const empty = `<div class="empty">${library.size ? 'No styles match.' : 'No styles yet. + adds style files; the folder button adds every style in a folder.'}</div>`;
     $('lib-count').textContent = library.size ? `${rows.length} of ${library.size} styles` : '';
     renderStorage();
-    // LAYOUT › SHOW FOLDERS off: one list, A to Z, no folder headers.
-    if (!state.showFolders) {
-      const sorted = rows.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
-      $('lib-list').innerHTML = sorted.map(rowHtml).join('') || empty;
-      return;
-    }
-    // Grouped by folder, each under a sticky header that collapses it (saved). While searching, every match shows.
     const groups = {};
-    rows.forEach((e) => { (groups[e.folder || ''] = groups[e.folder || ''] || []).push(e); });
-    const folders = Object.keys(groups).sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const keysOf = BROWSE[state.browse].keys || ((e) => [groupOf(e)]);
+    rows.forEach((e) => keysOf(e).forEach((k) => { (groups[k] = groups[k] || []).push(e); }));
     const searching = !!view.search.trim();
-    $('lib-list').innerHTML = folders.map((folder) => {
-      const closed = !searching && !!state.collapsed[folder] && folder !== view.openFolder;
-      const head = `<div class="folder${closed ? ' closed' : ''}" data-folder="${esc(folder)}" role="button" aria-expanded="${!closed}">` +
-        `${TRI_SVG}<span class="folder-name">${esc(folder || 'Other')}</span>` +
-        `<span class="folder-count">${groups[folder].length}</span></div>`;
+    const label = BROWSE[state.browse].label;
+    $('lib-list').innerHTML = sortGroups(Object.keys(groups)).map((k) => {
+      const closed = !searching && !!state.collapsed[shutKey(k)] && k !== view.openGroup;
+      const head = `<div class="folder${closed ? ' closed' : ''}" data-group="${esc(k)}" role="button" aria-expanded="${!closed}">` +
+        `${TRI_SVG}<span class="folder-name">${esc(label(k))}</span>` +
+        `<span class="folder-count">${groups[k].length}</span></div>`;
       if (closed) return head;
-      return head + groups[folder].map(rowHtml).join('');
+      const list = state.browse === 'bpm' ? groups[k].slice().sort((a, b) => library.bpm(a) - library.bpm(b) || byTitle(a, b)) : groups[k].slice().sort(byTitle);
+      return head + list.map(rowHtml).join('');
     }).join('') || empty;
   }
 
@@ -599,7 +632,9 @@
   const CHANNEL_OPTIONS = '<option value="0">OFF</option>' + Array.from({ length: 16 }, (_, k) => `<option value="${k + 1}">${k + 1}</option>`).join('');
   // What a part plays, by GM name: the style's voice for it, else the first program change it has anywhere (some
   // Roland parts set theirs later in a section). Drums show a kit name. With the program number, as on a GM synth.
+  // As a GM synth gets it: Yamaha's Mega Voices (bank MSB 8) mapped to GM guitars and basses (ChannelMap.gmProgram).
   function programOf(part, style) {
+    if (part.voice && part.voice.program != null) return A.ChannelMap.gmProgram(part.voice.msb, part.voice.program, part.role);
     let prog = part.voice && part.voice.program;
     if (prog == null) {
       style.order.some((id) => {
@@ -629,6 +664,17 @@
     });
     return out;
   }
+  // Yamaha Mega Voice guitars and basses (bank MSB 8, programs below 32) keep their strum, fret and body noises from C7
+  // (96) up: in the user's styles 172,000 Mega guitar notes there against 4,500 in the octave below (2026-11-27). A GM
+  // guitar plays them as shrill high notes (BodhranFolk's chord 1, a fifth of its notes), so they aren't played.
+  function noteCeilings(style) {
+    const out = {};
+    style.parts.forEach((p) => {
+      const v = p.voice || {};
+      if (p.role !== 'drums' && v.msb === 8 && v.program != null && v.program < 32) out[p.id] = 96;
+    });
+    return out;
+  }
   function soundName(part, style) {
     const prog = programOf(part, style);
     if (prog == null) return '';
@@ -641,6 +687,7 @@
   function renderStyle() {
     renderDelete();
     renderFavorite();
+    $('style-edit').hidden = !current;
     if (!current) {
       $('style-name').textContent = 'No style loaded';
       $('style-sum').textContent = 'Add styles with + (files) or the folder button, then tap one.';
@@ -649,8 +696,9 @@
       return;
     }
     const s = current.style;
-    $('style-name').textContent = s.name;
-    $('style-sum').textContent = `${A.Style.summary(s)} · ${s.source === 'sty' ? 'Yamaha' : 'Roland'} ${s.format}`;
+    const tags = library.tags(current.entry).join(', ');
+    $('style-name').textContent = library.title(current.entry);
+    $('style-sum').textContent = `${tags ? tags + ' · ' : ''}${A.Style.summary(s)} · ${s.source === 'sty' ? 'Yamaha' : 'Roland'} ${s.format}`;
     // Section buttons: INTRO and ENDING letters, FILL and BREAK on the first row; the four MAINs, wide, below.
     const buttonsOf = (g) => {
       if (g.letters) {
@@ -678,7 +726,7 @@
         `<label class="check" title="Send bank and program changes on this channel (off for a drum plugin)"><input type="checkbox" data-prg${m.program ? ' checked' : ''}></label>` +
         `<label class="check" title="Mute this part"><input type="checkbox" data-mute${m.mute ? ' checked' : ''}></label>` +
         `<select data-vel title="Added to every note's velocity on this part">${VEL_OPTIONS}</select>` +
-        `<span class="part-voice">${esc(voice)}</span></div>`;
+        `<span class="part-sound">${soundCell(p)}</span></div>`;
     }).join('') +
       // DEFAULTS under the last part: drops this style's own PARTS setup.
       '<div class="parts-foot"><button id="parts-defaults" class="btn" type="button" title="Drop this style\'s own PARTS setup and use the defaults" disabled>DEFAULTS</button></div>';
@@ -686,10 +734,46 @@
       row.querySelector('[data-ch]').value = String(channelMap.get(row.getAttribute('data-part')).channel);
       row.querySelector('[data-vel]').value = String(channelMap.get(row.getAttribute('data-part')).velocity);
     });
+    renderSounds();
     renderPartsHead();
     renderPartsBar();
     renderTransport();
   }
+  // SOUND: a menu per part. Its first entry is the style's own sound; the others override the part's CHANNEL: every
+  // part on that channel plays the chosen GM instrument (on channel 10, the chosen drum kit), and the style's own
+  // program changes there are ignored. Saved with the style (settings.sounds, by channel), as PARTS changes are.
+  const GM_FAMILIES = ['Piano', 'Chromatic Percussion', 'Organ', 'Guitar', 'Bass', 'Strings', 'Ensemble', 'Brass', 'Reed', 'Pipe',
+    'Synth Lead', 'Synth Pad', 'Synth Effects', 'Ethnic', 'Percussive', 'Sound Effects'];
+  const PROGRAM_OPTIONS = GM_FAMILIES.map((fam, f) => `<optgroup label="${fam}">` +
+    Array.from({ length: 8 }, (_, k) => f * 8 + k).map((n) => `<option value="${n}">${n + 1} ${esc(A.GmNames.program(n))}</option>`).join('') +
+    '</optgroup>').join('');
+  const KIT_OPTIONS = '<optgroup label="Drum kits">' + A.ChannelMap.GM_KITS.map((n) => `<option value="${n}">${n + 1} ${esc(A.GmNames.kit(n))}</option>`).join('') + '</optgroup>';
+  function soundCell(p) {
+    const ch = channelMap.channel(p.id), over = ch ? channelMap.sound(ch) : null, own = soundName(p, current.style) || 'none';
+    if (!ch) return `<span class="part-voice">${esc(own)}</span>`;          // off or muted: nothing to override
+    return `<select data-sound class="${over != null ? 'override' : ''}" title="Channel ${ch}'s sound: the style's, or one for every part on channel ${ch}">` +
+      `<option value="">Style: ${esc(own)}</option>${channelMap.isDrumChannel(ch) ? KIT_OPTIONS : PROGRAM_OPTIONS}</select>`;
+  }
+  // The SOUND cells again (a channel or an override changed: other rows on that channel show it too).
+  function renderSounds() {
+    if (!current) return;
+    Array.from($('style-parts').querySelectorAll('.part-row[data-part]')).forEach((row) => {
+      const p = current.style.parts.find((x) => x.id === row.getAttribute('data-part'));
+      if (!p) return;
+      const cell = row.querySelector('.part-sound');
+      cell.innerHTML = soundCell(p);
+      const sel = cell.querySelector('select'), ch = channelMap.channel(p.id);
+      if (sel) sel.value = channelMap.sound(ch) != null ? String(channelMap.sound(ch)) : '';
+    });
+  }
+  async function saveSounds() {
+    if (!current) return;
+    const s = settingsOfCurrent(), sounds = channelMap.soundsJSON();
+    if (Object.keys(sounds).length) s.sounds = sounds; else delete s.sounds;
+    await library.setSettings(current.entry.id, s);
+    renderPartsHead();
+  }
+
   // PARTS is a bar that opens the table: "7 parts on channels 2-10 · none muted". Open or closed is remembered.
   function renderPartsBar() {
     const open = !!state.partsOpen && !!current;
@@ -701,7 +785,9 @@
     const muted = parts.filter((p) => channelMap.get(p.id).mute).length;
     $('parts-sum').textContent = `${parts.length} part${parts.length === 1 ? '' : 's'}` +
       (chans.length ? ` on channels ${Math.min.apply(null, chans)}–${Math.max.apply(null, chans)}` : '') +
-      ` · ${muted ? muted + ' muted' : 'none muted'}` + (open ? '' : ' · tap to open');
+      ` · ${muted ? muted + ' muted' : 'none muted'}` +
+      (Object.keys(channelMap.soundsJSON()).length ? ` · ${Object.keys(channelMap.soundsJSON()).length} sound${Object.keys(channelMap.soundsJSON()).length === 1 ? '' : 's'} changed` : '') +
+      (open ? '' : ' · tap to open');
   }
 
   // Section buttons lit from the flow: the one playing, the one coming at the next bar line (blinking), where a
@@ -780,11 +866,11 @@
       if (player.playing) {
         // Playing: the new style takes over at the next bar line, in its Main A (no intro).
         player.changeStyle(current.style, channelMap, set.groups, set.tempo);
-        player.setNoteFloors(noteFloors(current.style));
+        player.setNoteFloors(noteFloors(current.style)); player.setNoteCeilings(noteCeilings(current.style));
         player.setVolume(set.volume != null ? set.volume : 1);
       } else {
         player.load(current.style, channelMap, set.groups);
-        player.setNoteFloors(noteFloors(current.style));
+        player.setNoteFloors(noteFloors(current.style)); player.setNoteCeilings(noteCeilings(current.style));
         player.flow.autoFill = state.autoFill;
         if (set.tempo) player.setTempo(set.tempo);
         player.setVolume(set.volume != null ? set.volume : 1);
@@ -842,7 +928,13 @@
     if (r.failed.length > 30) lines.push(`<div class="warn">… and ${r.failed.length - 30} more.</div>`);
     showMessages(lines.join(''));
     renderLibrary();
-    if (!current && r.added.length === 1) loadStyle(r.added[0].id);
+    // One style added: it's loaded and selected in the list, its group opened (just for now) and its row scrolled
+    // into view, as after a reload.
+    if (r.added.length === 1) {
+      view.openGroup = groupOf(r.added[0]);
+      await loadStyle(r.added[0].id);
+      showCurrentRow();
+    }
   }
 
   // + and the folder button are labels for these inputs (see index.html). The folder input only exists where folders
@@ -860,15 +952,14 @@
   $('lib-search').addEventListener('input', (ev) => { view.search = ev.target.value; renderLibrary(); });
   $('lib-clear').addEventListener('click', () => { view.search = ''; $('lib-search').value = ''; renderLibrary(); });
   $('lib-fav').addEventListener('click', () => { view.favorites = !view.favorites; renderLibrary(); });
-  $('lib-meter').addEventListener('change', (ev) => { view.meter = ev.target.value; renderLibrary(); });
   $('lib-list').addEventListener('click', async (ev) => {
     const head = ev.target.closest('.folder');
     if (head) {
       if (view.search.trim()) return;                 // searching shows every match; folders open again after
-      const f = head.getAttribute('data-folder');
-      const shut = state.collapsed[f] && f !== view.openFolder;
-      if (f === view.openFolder) view.openFolder = null;
-      if (shut) delete state.collapsed[f]; else state.collapsed[f] = true;
+      const g = head.getAttribute('data-group'), k = shutKey(g);
+      const shut = state.collapsed[k] && g !== view.openGroup;
+      if (g === view.openGroup) view.openGroup = null;
+      if (shut) delete state.collapsed[k]; else state.collapsed[k] = true;
       save(); renderLibrary();
       return;
     }
@@ -876,6 +967,95 @@
     if (!row) return;
     loadStyle(row.getAttribute('data-id'));
   });
+  // ✎ by the style's name: STYLE INFO, a window to rename it (the name shown; the file keeps its own) and tag it, both
+  // kept with its settings by music hash, with what the library knows of it (meter, tempo, the folder it came from,
+  // the file). Every tag in the library is a button (lit: this style has it); a new one is typed (commas split) and
+  // added with ADD or Enter. The tags can also go on every style of its folder at once. SAVE, or Enter with nothing
+  // typed, saves; ✕, Escape or a tap outside closes without saving.
+  let infoFor = null, infoTags = [];
+  function showInfo(on) {
+    $('info-modal').hidden = !on;
+    if (!on) { infoFor = null; return; }
+    const e = current && library.entries[current.entry.id];
+    if (!e) { $('info-modal').hidden = true; return; }
+    infoFor = e.id;
+    infoTags = library.tags(e);
+    $('info-name').value = library.title(e);
+    $('info-name').placeholder = e.name;
+    $('info-tag').value = '';
+    const fact = (k, v) => `<dt>${k}</dt><dd>${esc(v)}</dd>`;
+    const mains = (e.sections || []).filter((s) => /^main/.test(s)).map((s) => s.slice(4)).sort();
+    $('info-facts').innerHTML = fact('METER', e.meter) + fact('MAINS', mains.length ? `${mains.length} (${mains.join(' ')})` : '?') +
+      fact('BPM', library.bpm(e) === e.tempo ? `${e.tempo}` : `${library.bpm(e)} (the file's: ${e.tempo})`) +
+      fact('FOLDER', e.folder || '(none)') + fact('FILE', `${e.fileName} · ${e.source === 'sty' ? 'Yamaha' : 'Roland'} ${e.format || ''}`.trim()) +
+      fact('ADDED', e.added ? new Date(e.added).toLocaleDateString() : '');
+    renderInfoTags();
+    $('info-name').focus();
+  }
+  const folderMates = (e) => Object.keys(library.entries).map((k) => library.entries[k]).filter((x) => (x.folder || '') === (e.folder || ''));
+  function renderInfoTags() {
+    const has = infoTags.map((t) => t.toLowerCase());
+    const all = library.allTags();
+    infoTags.forEach((t) => { if (!all.some((a) => a.toLowerCase() === t.toLowerCase())) all.push(t); });
+    all.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
+    $('info-tags').innerHTML = all.map((t) =>
+      `<button class="btn${has.indexOf(t.toLowerCase()) >= 0 ? ' on' : ''}" type="button" data-tag="${esc(t)}" aria-pressed="${has.indexOf(t.toLowerCase()) >= 0}">${esc(t)}</button>`).join('') ||
+      '<span class="note">No tags yet: type one above (a genre, a country, the keyboard it came from…).</span>';
+    const e = infoFor && library.entries[infoFor];
+    const n = e ? folderMates(e).length : 0;
+    const b = $('info-folder-tags');
+    b.hidden = !(e && n > 1 && infoTags.length);
+    if (e) b.textContent = `ADD THESE TAGS TO ALL ${n} IN ${(e.folder || 'Other').toUpperCase()}`;
+  }
+  // The typed tags (commas split them) join the style's; Enter with nothing typed saves.
+  function addTypedTags() {
+    const typed = $('info-tag').value.split(',').map((t) => t.trim()).filter(Boolean);
+    if (!typed.length) return false;
+    infoTags = library.fixTags(infoTags.concat(typed));
+    $('info-tag').value = '';
+    renderInfoTags();
+    return true;
+  }
+  async function saveInfo() {
+    const id = infoFor;
+    if (!id || !library.entries[id]) { showInfo(false); return; }
+    addTypedTags();
+    await library.setInfo(id, { title: $('info-name').value, tags: infoTags });
+    showInfo(false);
+    renderStyle(); renderLibrary();
+  }
+  $('style-edit').addEventListener('click', () => showInfo(true));
+  $('info-close').addEventListener('click', () => showInfo(false));
+  $('info-save').addEventListener('click', saveInfo);
+  $('info-add').addEventListener('click', () => { addTypedTags(); $('info-tag').focus(); });
+  $('info-modal').addEventListener('click', (ev) => { if (ev.target === $('info-modal')) showInfo(false); });
+  $('info-tags').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-tag]');
+    if (!b) return;
+    const t = b.getAttribute('data-tag'), k = t.toLowerCase();
+    const had = infoTags.some((x) => x.toLowerCase() === k);
+    infoTags = had ? infoTags.filter((x) => x.toLowerCase() !== k) : infoTags.concat([t]);
+    renderInfoTags();
+  });
+  $('info-folder-tags').addEventListener('click', async () => {
+    const id = infoFor, e = id && library.entries[id];
+    if (!e) return;
+    addTypedTags();
+    const tags = infoTags.slice(), mates = folderMates(e);
+    await library.setInfo(id, { title: $('info-name').value, tags });
+    const n = await library.addTags(mates.map((x) => x.id), tags);
+    showInfo(false);
+    renderStyle(); renderLibrary();
+    showMessages(`<div>Added ${esc(tags.join(', '))} to ${n} more style${n === 1 ? '' : 's'} in ${esc(e.folder || 'Other')}.</div>`);
+  });
+  $('info-name').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); saveInfo(); } });
+  $('info-tag').addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    if (!addTypedTags()) saveInfo();
+  });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !$('info-modal').hidden) showInfo(false); });
+
   // The star next to the style name: the loaded style as a favourite (the ★ filter above the list shows only those).
   function renderFavorite() {
     const b = $('style-fav');
@@ -948,7 +1128,7 @@
     tempoSave = setTimeout(() => {
       const settings = Object.assign({}, library.entries[id] ? library.entries[id].settings : {});
       if (own) delete settings.tempo; else settings.tempo = Math.round(player.tempo);
-      library.setSettings(id, settings);
+      library.setSettings(id, settings).then(renderLibrary);                 // the list shows the tempo it plays at
     }, 600);
     renderTransport();
   }
@@ -985,14 +1165,16 @@
   // DEFAULTS, under the table: drops the loaded style's own PARTS setup; greyed out when it has none.
   function renderPartsHead() {
     const b = document.getElementById('parts-defaults');
-    if (b) b.disabled = !(current && settingsOfCurrent().parts);
+    if (b) b.disabled = !(current && (settingsOfCurrent().parts || settingsOfCurrent().sounds));
   }
   $('style-parts').addEventListener('click', async (ev) => {
     if (!ev.target.closest('#parts-defaults') || !current) return;
     const s = settingsOfCurrent();
-    delete s.parts;
+    const hadSounds = Object.keys(channelMap.soundsJSON());
+    delete s.parts; delete s.sounds;
     await library.setSettings(current.entry.id, s);
     channelMap = styleMapFor(s); player.map = channelMap;
+    hadSounds.forEach((ch) => player.refreshChannel(Number(ch)));        // the style's own sounds back at once
     renderStyle();
   });
   $('parts-toggle').addEventListener('click', () => {
@@ -1008,14 +1190,22 @@
     else if (ev.target.matches('[data-mute]')) channelMap.set(pid, { mute: ev.target.checked });
     else if (ev.target.matches('[data-vel]')) channelMap.set(pid, { velocity: Number(ev.target.value) });
     else if (ev.target.matches('[data-ch]')) channelMap.set(pid, { channel: Number(ev.target.value) });
-    else return;
+    else if (ev.target.matches('[data-sound]')) {
+      // An override for the part's channel (or none): heard at once while playing, saved with the style.
+      const ch = channelMap.channel(pid);
+      channelMap.setSound(ch, ev.target.value === '' ? null : Number(ev.target.value));
+      if (player.map === channelMap) player.refreshChannel(ch);
+      saveSounds(); renderSounds(); renderPartsBar();
+      return;
+    } else return;
     savePart(pid);
+    renderSounds();
     renderPartsBar();
   });
   // Space bar: start / stop (not while typing in the search box).
   document.addEventListener('keydown', (ev) => {
     if (ev.code !== 'Space' || /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName)) return;
-    if (!$('settings-modal').hidden) return;          // the space bar presses buttons in the settings, not START
+    if (!$('settings-modal').hidden || !$('info-modal').hidden) return;   // the space bar presses buttons in the windows, not START
     ev.preventDefault();
     startEnding();
   });
@@ -1239,8 +1429,8 @@
     await addDefaults();
     renderLibrary();
     if (state.styleId && library.entries[state.styleId]) {
-      // The style from before the reload: loaded, its folder opened (just for now) and its row scrolled into view.
-      view.openFolder = library.entries[state.styleId].folder || '';
+      // The style from before the reload: loaded, its group opened (just for now) and its row scrolled into view.
+      view.openGroup = groupOf(library.entries[state.styleId]);
       await loadStyle(state.styleId);
       showCurrentRow();
     }

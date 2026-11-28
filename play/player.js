@@ -18,6 +18,11 @@
 //                                      pressed a little early (up to an 8th note before a beat, SNAP_TICKS) takes
 //                                      effect on that beat; one pressed on or after a beat, at once. pendingChord
 //                                      holds an early one until its beat.
+//   refreshChannel(ch)                 while playing: sends the voices of the parts on channel ch again now (after
+//                                      its sound override changed in the channel map)
+//   setNoteCeilings({ partId: note })  notes of that part from `note` up (as written) aren't played: Yamaha Mega Voice
+//                                      guitars and basses keep strum / fret noises from C7 up, which a GM guitar plays
+//                                      as shrill high notes
 //   setNoteFloors({ partId: note })    notes of that part below `note` (as written in the pattern) aren't played:
 //                                      Roland guitar parts use keys far below a guitar's range for strum / fret
 //                                      noises, which a GM guitar plays as very low notes
@@ -59,7 +64,7 @@
       this.tempo = 120; this.chord = null;
       this.pendingChord = null;      // { chord, time }: pressed early, takes effect on the beat at time
       this.volume = 1;
-      this.floors = {};
+      this.floors = {}; this.ceilings = {};
       this.soloPercussion = false;
       this.baseVolume = {};          // channel -> the last CC 7 value the style asked for (before scaling)
       this.playing = false; this.handle = null;
@@ -175,6 +180,40 @@
     }
 
     setNoteFloors(map) { this.floors = Object.assign({}, map || {}); }
+    setNoteCeilings(map) { this.ceilings = Object.assign({}, map || {}); }
+    // A channel's sound sent again now (its parts' voices, or the channel's override), e.g. after the override changed.
+    // Only while playing: a start sends every voice anyway.
+    // A part whose voice has no program (it sets its sound with a program change in its patterns) gets that program
+    // change, so turning an override off brings the style's sound back at once, not at its next program change.
+    refreshChannel(ch) {
+      if (!this.playing || !this.style) return;
+      const now = this.clock(), batch = [];
+      this.style.parts.forEach((p) => {
+        if (this.map.channel(p.id) !== ch) return;
+        const msgs = this.map.voiceMessages(p);
+        msgs.forEach((m) => batch.push({ time: now, kind: 'ctl', data: m }));
+        if (msgs.some((m) => (m[0] & 0xF0) === 0xC0)) return;
+        const prog = this.patternProgram(p);
+        const f = prog != null && this.map.filter(p, { type: 'program', program: prog });
+        if (!f) return;
+        const c = ch - 1;
+        if (p.role !== 'drums') batch.push({ time: now, kind: 'ctl', data: [0xB0 | c, 0, 0] }, { time: now, kind: 'ctl', data: [0xB0 | c, 32, 0] });
+        batch.push({ time: now, kind: 'ctl', data: [0xC0 | c, f.program] });
+      });
+      this.flush(batch);
+    }
+    // The program a part's patterns set: in the section playing first, else the first one anywhere in the style.
+    patternProgram(part) {
+      const first = (id) => {
+        const sec = this.style.sections[id], t = sec && sec.tracks[part.id];
+        const e = t && t.patterns[0] && t.patterns[0].events.find((x) => x.type === 'program');
+        return e ? e.program : null;
+      };
+      const here = this.seg ? first(this.seg.section) : null;
+      if (here != null) return here;
+      for (const id of this.style.order) { const p = first(id); if (p != null) return p; }
+      return null;
+    }
     setSoloPercussion(on) {
       this.soloPercussion = !!on;
       if (!this.soloPercussion || !this.playing) return;
@@ -259,13 +298,13 @@
         const part = this.parts[pid];
         const ch = part ? this.map.channel(pid) : 0;
         if (!ch || (this.soloPercussion && part.role !== 'drums')) return;
-        const boost = this.map.get(pid).velocity, floor = this.floors[pid] || 0;
+        const boost = this.map.get(pid).velocity, floor = this.floors[pid] || 0, ceil = this.ceilings[pid] || 128;
         sec.tracks[pid].patterns.forEach((pat) => {
           if (!this.playedFor(pat, this.chord) || !only(pat) || pat.rule.retrigger === 'stop') return;
           const loop = pat.loopTicks > 0 && pat.loopTicks < sec.lengthTicks ? pat.loopTicks : sec.lengthTicks;
           const base = Math.floor(from / loop) * loop;
           pat.events.forEach((e) => {
-            if (e.type !== 'note' || e.note < floor || e.tick >= loop) return;
+            if (e.type !== 'note' || e.note < floor || e.note >= ceil || e.tick >= loop) return;
             const tick = base + e.tick, end = Math.min(tick + e.duration, base + loop, sec.lengthTicks);
             if (tick >= from || end <= from) return;
             const off = this.tickToTime(end);
@@ -407,7 +446,7 @@
         if (!ch) return;
         if (this.soloPercussion && part.role !== 'drums') return;
         const boost = this.map.get(pid).velocity;
-        const floor = this.floors[pid] || 0;
+        const floor = this.floors[pid] || 0, ceil = this.ceilings[pid] || 128;
         sec.tracks[pid].patterns.forEach((pat) => {
           if (!this.playedFor(pat, this.chord)) return;
           if (only && !only(pat)) return;
@@ -420,7 +459,7 @@
               if (e.tick >= loop || tick < from || tick >= to || tick >= sec.lengthTicks) return;
               const time = this.tickToTime(tick);
               if (e.type === 'note') {
-                if (e.note < floor) return;
+                if (e.note < floor || e.note >= ceil) return;
                 const n = T.note(e.note, pat.rule, this.chord);
                 const prev = this.sounding.find((s) => s.ch === ch && s.note === n && s.off > time);
                 if (prev) this.end(prev, Math.max(time, prev.on), batch);
